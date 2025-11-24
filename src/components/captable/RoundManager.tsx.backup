@@ -1,0 +1,964 @@
+import React, { useState, useRef, useEffect } from 'react';
+import { Plus, Trash2, ChevronDown, Maximize2, Minimize2, DollarSign, Calendar } from 'lucide-react';
+import { Button } from '../ui/Button';
+import { Input } from '../ui/Input';
+import { formatCurrency, formatNumberInput, parseNumberInput, formatPrice, formatPercent } from '../../utils';
+import type { CapTable, Round, InvestmentType } from '../../engine/types';
+
+interface RoundManagerProps {
+    capTable: CapTable;
+    onUpdate: (rounds: Round[]) => void;
+    onCapTableUpdate: (capTable: CapTable) => void;
+}
+
+const FormattedInput = ({
+    value,
+    onChange,
+    className,
+    placeholder
+}: {
+    value: number | undefined,
+    onChange: (val: number) => void,
+    className?: string,
+    placeholder?: string
+}) => {
+    const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+        const val = parseNumberInput(e.target.value);
+        onChange(val);
+    };
+
+    return (
+        <input
+            type="text"
+            value={formatNumberInput(value ?? '')}
+            onChange={handleChange}
+            className={className}
+            placeholder={placeholder}
+        />
+    );
+};
+
+export const RoundManager: React.FC<RoundManagerProps> = ({ capTable, onUpdate, onCapTableUpdate }) => {
+    const [collapsedRounds, setCollapsedRounds] = useState<Set<string>>(new Set());
+    const [showOptionPool, setShowOptionPool] = useState<Set<string>>(new Set());
+    const [showLiqPref, setShowLiqPref] = useState<Set<string>>(new Set());
+    const [addingInvestorToRound, setAddingInvestorToRound] = useState<string | null>(null);
+    const [newInvestorName, setNewInvestorName] = useState('');
+    const [newInvestorRole, setNewInvestorRole] = useState<'Founder' | 'Angel' | 'VC' | 'Employee' | 'Advisor'>('Angel');
+    const [newInvestorAmount, setNewInvestorAmount] = useState<number>(0);
+    const scrollContainerRef = useRef<HTMLDivElement>(null);
+    const lastRoundCount = useRef(capTable.rounds.length);
+
+    // Handle auto-scroll and auto-collapse when adding a round
+    useEffect(() => {
+        if (capTable.rounds.length > lastRoundCount.current) {
+            // A round was added
+            if (scrollContainerRef.current) {
+                // Scroll to the end
+                setTimeout(() => {
+                    scrollContainerRef.current?.scrollTo({
+                        left: scrollContainerRef.current.scrollWidth,
+                        behavior: 'smooth'
+                    });
+                }, 100);
+            }
+        }
+        lastRoundCount.current = capTable.rounds.length;
+    }, [capTable.rounds.length]);
+
+    const addRound = () => {
+        // Auto-generate shareClass based on existing rounds
+        const existingClasses = capTable.rounds.map(r => r.shareClass).filter(c => c.startsWith('A'));
+        let nextClass = 'A1';
+        if (existingClasses.length > 0) {
+            // Extract numbers and find max
+            const numbers = existingClasses.map(c => {
+                const match = c.match(/A(\d+)/);
+                return match ? parseInt(match[1]) : 0;
+            });
+            const maxNum = Math.max(...numbers, 0);
+            nextClass = `A${maxNum + 1}`;
+        }
+
+        // Auto-generate poolClass
+        const existingPoolClasses = capTable.rounds
+            .map(r => r.poolClass)
+            .filter(c => c && c.startsWith('Pool '));
+        let nextPoolClass = 'Pool 1';
+        if (existingPoolClasses.length > 0) {
+            const numbers = existingPoolClasses.map(c => {
+                const match = c!.match(/Pool (\d+)/);
+                return match ? parseInt(match[1]) : 0;
+            });
+            const maxNum = Math.max(...numbers, 0);
+            nextPoolClass = `Pool ${maxNum + 1}`;
+        }
+
+        const newRound: Round = {
+            id: Math.random().toString(36).substr(2, 9),
+            name: 'New Round',
+            investmentType: 'Equity',
+            shareClass: nextClass,
+            date: new Date().toISOString().split('T')[0],
+            preMoneyValuation: 0,
+            pricePerShare: 0,
+            totalShares: 0,
+            newSharesIssued: 0,
+            investments: [],
+            poolSize: 0,
+            poolClass: nextPoolClass,
+            liquidationPreferenceMultiple: 1,
+            isParticipating: false
+        };
+
+        // Collapse all existing rounds
+        const newCollapsed = new Set(collapsedRounds);
+        capTable.rounds.forEach(r => newCollapsed.add(r.id));
+        setCollapsedRounds(newCollapsed);
+
+        onUpdate([...capTable.rounds, newRound]);
+    };
+
+    const updateRound = (id: string, updates: Partial<Round>) => {
+        onUpdate(capTable.rounds.map(r => r.id === id ? { ...r, ...updates } : r));
+    };
+
+    const deleteRound = (id: string) => {
+        onUpdate(capTable.rounds.filter(r => r.id !== id));
+    };
+
+    const updateInvestment = (roundId: string, shareholderId: string, updates: { amount?: number, shares?: number }) => {
+        const round = capTable.rounds.find(r => r.id === roundId);
+        if (!round) return;
+
+        const existingInvIndex = round.investments.findIndex(i => i.shareholderId === shareholderId);
+        let newInvestments = [...round.investments];
+
+        if (existingInvIndex >= 0) {
+            const currentInv = newInvestments[existingInvIndex];
+            const newAmount = updates.amount !== undefined ? updates.amount : currentInv.amount;
+            const newShares = updates.shares !== undefined ? updates.shares : currentInv.shares;
+
+            if (newAmount <= 0 && newShares <= 0) {
+                newInvestments.splice(existingInvIndex, 1);
+            } else {
+                newInvestments[existingInvIndex] = { ...currentInv, ...updates };
+            }
+        } else {
+            // Only add if there's a meaningful value
+            if ((updates.amount && updates.amount > 0) || (updates.shares && updates.shares > 0)) {
+                newInvestments.push({
+                    shareholderId,
+                    amount: updates.amount || 0,
+                    shares: updates.shares || 0
+                });
+            }
+        }
+
+        updateRound(roundId, { investments: newInvestments });
+    };
+
+    const startAddingInvestor = (roundId: string) => {
+        setAddingInvestorToRound(roundId);
+        setNewInvestorName('');
+        setNewInvestorRole('Angel');
+        setNewInvestorAmount(0);
+    };
+
+    const cancelAddingInvestor = () => {
+        setAddingInvestorToRound(null);
+        setNewInvestorName('');
+        setNewInvestorRole('Angel');
+        setNewInvestorAmount(0);
+    };
+
+    const saveNewInvestor = (roundId: string) => {
+        // Validation
+        const trimmedName = newInvestorName.trim();
+        if (!trimmedName) {
+            alert('Please enter a shareholder name');
+            return;
+        }
+        if (newInvestorAmount <= 0) {
+            alert('Please enter an investment amount greater than 0');
+            return;
+        }
+
+        // Check if shareholder already exists (case-insensitive)
+        let shareholder = capTable.shareholders.find(
+            s => s.name.toLowerCase() === trimmedName.toLowerCase()
+        );
+
+        let shareholderId: string;
+
+        if (shareholder) {
+            // Use existing shareholder
+            shareholderId = shareholder.id;
+        } else {
+            // Create new shareholder
+            shareholderId = `sh-${Date.now()}`;
+            const newShareholder = {
+                id: shareholderId,
+                name: trimmedName,
+                role: newInvestorRole
+            };
+
+            // Update capTable with new shareholder
+            onCapTableUpdate({
+                ...capTable,
+                shareholders: [...capTable.shareholders, newShareholder]
+            });
+        }
+
+        // Add investment to round
+        updateInvestment(roundId, shareholderId, { amount: newInvestorAmount });
+
+        // Reset form
+        cancelAddingInvestor();
+    };
+
+    const toggleCollapse = (id: string) => {
+        const newCollapsed = new Set(collapsedRounds);
+        if (newCollapsed.has(id)) {
+            newCollapsed.delete(id);
+        } else {
+            newCollapsed.add(id);
+        }
+        setCollapsedRounds(newCollapsed);
+    };
+
+    const collapseAll = () => {
+        const newCollapsed = new Set(capTable.rounds.map(r => r.id));
+        setCollapsedRounds(newCollapsed);
+    };
+
+    const expandAll = () => {
+        setCollapsedRounds(new Set());
+    };
+
+    return (
+        <div className="space-y-6">
+            <div className="flex items-center justify-between">
+                <h3 className="text-lg font-semibold text-slate-800">Funding Rounds</h3>
+                <div className="flex items-center gap-2">
+                    <div className="flex bg-slate-100 rounded-lg p-1 mr-2">
+                        <button
+                            onClick={expandAll}
+                            className="p-1.5 text-slate-600 hover:text-blue-600 hover:bg-white rounded-md transition-all"
+                            title="Expand All"
+                        >
+                            <Maximize2 className="w-4 h-4" />
+                        </button>
+                        <button
+                            onClick={collapseAll}
+                            className="p-1.5 text-slate-600 hover:text-blue-600 hover:bg-white rounded-md transition-all"
+                            title="Collapse All"
+                        >
+                            <Minimize2 className="w-4 h-4" />
+                        </button>
+                    </div>
+                    <Button onClick={addRound} size="sm">
+                        <Plus className="w-4 h-4 mr-2" /> Add Round
+                    </Button>
+                </div>
+            </div>
+
+            <div
+                ref={scrollContainerRef}
+                className="grid grid-cols-1 gap-6 overflow-x-auto pb-4 scroll-smooth"
+            >
+                <div className="flex gap-6 min-w-max items-start">
+                    {capTable.rounds.map((round) => {
+                        const isCollapsed = collapsedRounds.has(round.id);
+                        const totalInvested = round.investments.reduce((acc, i) => acc + i.amount, 0);
+
+                        return (
+                            <div
+                                key={round.id}
+                                className={`transition-all duration-500 ease-in-out bg-white rounded-xl border border-slate-200 shadow-sm flex flex-col ${isCollapsed ? 'w-72' : 'w-80'}`}
+                            >
+                                <div className={`p-4 border-b border-slate-100 bg-slate-50/50 rounded-t-xl transition-all duration-300 ${isCollapsed ? 'rounded-b-xl border-b-0' : ''}`}>
+                                    <div className="flex justify-between items-center mb-1">
+                                        <div className="flex items-center gap-2 overflow-hidden">
+                                            <button
+                                                onClick={() => toggleCollapse(round.id)}
+                                                className="text-slate-400 hover:text-blue-500 transition-colors flex-shrink-0"
+                                            >
+                                                <ChevronDown className={`w-4 h-4 transition-transform duration-300 ${isCollapsed ? '-rotate-90' : 'rotate-0'}`} />
+                                            </button>
+                                            <Input
+                                                value={round.name}
+                                                onChange={(e) => updateRound(round.id, { name: e.target.value })}
+                                                className="font-bold text-slate-900 bg-transparent border-transparent hover:border-slate-300 focus:bg-white h-8 px-1 -ml-1 w-32 min-w-0"
+                                            />
+                                        </div>
+                                        {!isCollapsed && (
+                                            <button onClick={() => deleteRound(round.id)} className="text-slate-400 hover:text-red-500 flex-shrink-0 ml-2">
+                                                <Trash2 className="w-4 h-4" />
+                                            </button>
+                                        )}
+                                    </div>
+
+                                    {/* Collapsed Summary View */}
+                                    <div className={`transition-all duration-500 ease-in-out overflow-hidden ${isCollapsed ? 'max-h-[1000px] opacity-100 mt-2 pl-6' : 'max-h-0 opacity-0'}`}>
+                                        <div className="space-y-2 pb-4">
+                                            <div>
+                                                <div className="text-xs font-medium text-slate-500 uppercase whitespace-nowrap">Total Invested</div>
+                                                <div className="font-bold text-slate-700 text-lg whitespace-nowrap">
+                                                    {formatCurrency(totalInvested)}
+                                                </div>
+                                            </div>
+
+                                            {/* Dilution Display - Only for funding rounds (not Founding Round) */}
+                                            {round.preMoneyValuation > 0 && round.calculatedDilution !== undefined && round.calculatedDilution > 0 && (
+                                                <div>
+                                                    <div className="text-xs font-medium text-slate-500 uppercase whitespace-nowrap">Dilution</div>
+                                                    <div className="font-semibold text-red-600 text-sm whitespace-nowrap">
+                                                        {formatPercent(round.calculatedDilution)}
+                                                    </div>
+                                                </div>
+                                            )}
+
+                                            {/* Show Post-Money for non-founding rounds, or if there's a pre-money valuation */}
+                                            {round.preMoneyValuation > 0 && (
+                                                <div>
+                                                    <div className="text-xs font-medium text-slate-500 uppercase whitespace-nowrap">Post-Money</div>
+                                                    <div className="font-semibold text-blue-600 text-sm whitespace-nowrap">
+                                                        {formatCurrency(round.preMoneyValuation + totalInvested)}
+                                                    </div>
+                                                </div>
+                                            )}
+
+                                            {/* Show Price per Share */}
+                                            {round.calculatedPricePerShare && round.calculatedPricePerShare > 0 && (
+                                                <div>
+                                                    <div className="text-xs font-medium text-slate-500 uppercase whitespace-nowrap">
+                                                        {round.shareClass === 'Ordinary' ? 'Nominal Price' : 'Price per Share'}
+                                                    </div>
+                                                    <div className="font-semibold text-green-600 text-sm whitespace-nowrap">
+                                                        {formatPrice(round.calculatedPricePerShare)}
+                                                    </div>
+                                                </div>
+                                            )}
+
+                                            {/* Ownership Breakdown */}
+                                            {round.ownershipBreakdown && round.ownershipBreakdown.length > 0 && (
+                                                <div className="pt-2 mt-2 border-t border-slate-100 space-y-1">
+                                                    {round.ownershipBreakdown.map((item) => (
+                                                        <div key={item.id}>
+                                                            <div className="text-xs font-medium text-slate-500 uppercase whitespace-nowrap">{item.label}</div>
+                                                            <div className="font-semibold text-slate-700 text-sm whitespace-nowrap">
+                                                                {formatPercent(item.percentage)}
+                                                            </div>
+                                                        </div>
+                                                    ))}
+                                                </div>
+                                            )}
+                                        </div>
+                                    </div>
+
+                                    {/* Expanded Header Fields */}
+                                    <div className={`transition-all duration-500 ease-in-out ${!isCollapsed ? 'max-h-[1200px] opacity-100 mt-2 overflow-y-auto' : 'max-h-0 opacity-0 overflow-hidden'}`}>
+                                        <div className="space-y-4">
+                                            {/* Investment Type Selector */}
+                                            <div>
+                                                <label className="text-xs font-medium text-slate-500 uppercase">Investment Type</label>
+                                                <select
+                                                    value={round.investmentType || 'Equity'}
+                                                    onChange={(e) => updateRound(round.id, { investmentType: e.target.value as InvestmentType })}
+                                                    className="w-full px-2 py-1 text-sm border border-slate-200 rounded bg-white focus:ring-2 focus:ring-blue-500 outline-none mt-1"
+                                                >
+                                                    <option value="Equity">Equity</option>
+                                                    <option value="SAFE">SAFE</option>
+                                                    <option value="ConvertibleNote">Convertible Note</option>
+                                                    <option value="BSA_Air">BSA Air</option>
+                                                </select>
+                                            </div>
+
+                                            <div className="grid grid-cols-2 gap-3">
+                                                <div>
+                                                    <label className="text-xs font-medium text-slate-500 uppercase">Share Class</label>
+                                                    <input
+                                                        type="text"
+                                                        value={round.shareClass}
+                                                        onChange={(e) => updateRound(round.id, { shareClass: e.target.value })}
+                                                        className="w-full px-2 py-1 text-sm border border-slate-200 rounded bg-white focus:ring-2 focus:ring-blue-500 outline-none mt-1"
+                                                        placeholder="e.g., A1"
+                                                    />
+                                                </div>
+                                                <div>
+                                                    <label className="text-xs font-medium text-slate-500 uppercase">Date</label>
+                                                    <div className="relative mt-1">
+                                                        <Calendar className="w-3 h-3 absolute left-2 top-1/2 -translate-y-1/2 text-slate-400" />
+                                                        <input
+                                                            type="date"
+                                                            value={round.date}
+                                                            onChange={(e) => updateRound(round.id, { date: e.target.value })}
+                                                            className="w-full pl-6 pr-2 py-1 text-sm border border-slate-200 rounded bg-white focus:ring-2 focus:ring-blue-500 outline-none"
+                                                        />
+                                                    </div>
+                                                </div>
+                                            </div>
+
+                                            {/* Conditional Fields based on Type */}
+                                            {(round.investmentType === 'Equity' || !round.investmentType) && (
+                                                <>
+                                                    <div>
+                                                        <label className="text-xs font-medium text-slate-500 uppercase">Pre-Money Valuation</label>
+                                                        <div className="relative mt-1">
+                                                            <DollarSign className="w-3 h-3 absolute left-2 top-1/2 -translate-y-1/2 text-slate-400" />
+                                                            <FormattedInput
+                                                                value={round.preMoneyValuation}
+                                                                onChange={(val) => updateRound(round.id, { preMoneyValuation: val })}
+                                                                className="w-full pl-6 pr-2 py-1 text-sm border border-slate-200 rounded bg-white focus:ring-2 focus:ring-blue-500 outline-none"
+                                                            />
+                                                        </div>
+                                                    </div>
+
+                                                    <div>
+                                                        <label className="text-xs font-medium text-slate-500 uppercase flex items-center justify-between">
+                                                            <span>Option Pool</span>
+                                                            <button
+                                                                onClick={() => {
+                                                                    const newSet = new Set(showOptionPool);
+                                                                    if (newSet.has(round.id)) {
+                                                                        newSet.delete(round.id);
+                                                                    } else {
+                                                                        newSet.add(round.id);
+                                                                    }
+                                                                    setShowOptionPool(newSet);
+                                                                }}
+                                                                className="text-blue-600 hover:text-blue-700 text-xs font-semibold"
+                                                            >
+                                                                {showOptionPool.has(round.id) ? '− Hide' : '+ Show'}
+                                                            </button>
+                                                        </label>
+                                                        {showOptionPool.has(round.id) && (
+                                                            <>
+                                                                <div className="flex bg-slate-100 rounded p-0.5 mt-2">
+                                                                    <button
+                                                                        onClick={() => updateRound(round.id, { poolMode: 'percent' })}
+                                                                        className={`px-2 py-0.5 text-[10px] rounded flex-1 ${!round.poolMode || round.poolMode === 'percent' ? 'bg-white shadow text-blue-600 font-bold' : 'text-slate-400'}`}
+                                                                    >
+                                                                        %
+                                                                    </button>
+                                                                    <button
+                                                                        onClick={() => updateRound(round.id, { poolMode: 'shares' })}
+                                                                        className={`px-2 py-0.5 text-[10px] rounded flex-1 ${round.poolMode === 'shares' ? 'bg-white shadow text-blue-600 font-bold' : 'text-slate-400'}`}
+                                                                    >
+                                                                        Shares
+                                                                    </button>
+                                                                </div>
+                                                                <div className="relative mt-1">
+                                                                    {round.poolMode === 'shares' ? (
+                                                                        <>
+                                                                            <span className="absolute left-2 top-1/2 -translate-y-1/2 text-slate-400 text-xs">#</span>
+                                                                            <FormattedInput
+                                                                                value={round.poolSize}
+                                                                                onChange={(val) => updateRound(round.id, { poolSize: val })}
+                                                                                className="w-full pl-5 pr-2 py-1 text-sm border border-slate-200 rounded bg-white focus:ring-2 focus:ring-blue-500 outline-none"
+                                                                            />
+                                                                        </>
+                                                                    ) : (
+                                                                        <>
+                                                                            <span className="absolute left-2 top-1/2 -translate-y-1/2 text-slate-400 text-xs">%</span>
+                                                                            <FormattedInput
+                                                                                value={round.poolPercent}
+                                                                                onChange={(val) => updateRound(round.id, { poolPercent: val })}
+                                                                                className="w-full pl-5 pr-2 py-1 text-sm border border-slate-200 rounded bg-white focus:ring-2 focus:ring-blue-500 outline-none"
+                                                                            />
+                                                                        </>
+                                                                    )}
+                                                                </div>
+                                                                <input
+                                                                    type="text"
+                                                                    value={round.poolClass || ''}
+                                                                    onChange={(e) => updateRound(round.id, { poolClass: e.target.value })}
+                                                                    className="w-full px-2 py-1 text-xs border border-slate-200 rounded bg-white focus:ring-2 focus:ring-blue-500 outline-none mt-1"
+                                                                    placeholder="Pool label (e.g., Pool 1, BSPCE 2023)"
+                                                                />
+                                                            </>
+                                                        )}
+                                                    </div>
+
+                                                    {/* Liquidation Preference */}
+                                                    <div className="pt-2 border-t border-slate-100">
+                                                        <label className="text-xs font-medium text-slate-500 uppercase flex items-center justify-between">
+                                                            <span>Liquidation Preference</span>
+                                                            <button
+                                                                onClick={() => {
+                                                                    const newSet = new Set(showLiqPref);
+                                                                    if (newSet.has(round.id)) {
+                                                                        newSet.delete(round.id);
+                                                                    } else {
+                                                                        newSet.add(round.id);
+                                                                    }
+                                                                    setShowLiqPref(newSet);
+                                                                }}
+                                                                className="text-blue-600 hover:text-blue-700 text-xs font-semibold"
+                                                            >
+                                                                {showLiqPref.has(round.id) ? '− Hide' : '+ Show'}
+                                                            </button>
+                                                        </label>
+                                                        {showLiqPref.has(round.id) && (
+                                                            <div className="grid grid-cols-2 gap-3 mt-2">
+                                                                <div className="flex items-center">
+                                                                    <label className="flex items-center gap-2 cursor-pointer">
+                                                                        <input
+                                                                            type="checkbox"
+                                                                            checked={round.isParticipating || false}
+                                                                            onChange={(e) => updateRound(round.id, { isParticipating: e.target.checked })}
+                                                                            className="w-4 h-4 text-blue-600 rounded border-slate-300 focus:ring-blue-500"
+                                                                        />
+                                                                        <span className="text-xs font-medium text-slate-600">Participating</span>
+                                                                    </label>
+                                                                </div>
+                                                                <div>
+                                                                    <label className="text-xs font-medium text-slate-500 uppercase">Multiple (x)</label>
+                                                                    <div className="relative mt-1">
+                                                                        <input
+                                                                            type="number"
+                                                                            step="0.1"
+                                                                            value={round.liquidationPreferenceMultiple ?? 1}
+                                                                            onChange={(e) => updateRound(round.id, { liquidationPreferenceMultiple: parseFloat(e.target.value) })}
+                                                                            className="w-full px-2 py-1 text-sm border border-slate-200 rounded bg-white focus:ring-2 focus:ring-blue-500 outline-none"
+                                                                        />
+                                                                        <span className="absolute right-2 top-1/2 -translate-y-1/2 text-slate-400 text-xs">x</span>
+                                                                    </div>
+                                                                </div>
+                                                            </div>
+                                                        )}
+                                                    </div>
+                                                </>
+                                            )}
+
+                                            {/* SAFE / Convertible Note / BSA Air Fields */}
+                                            {round.investmentType !== 'Equity' && round.investmentType && (
+                                                <div className="space-y-3 bg-slate-50 p-3 rounded-lg border border-slate-100">
+                                                    {/* Valuation Cap (Common to all) */}
+                                                    <div>
+                                                        <label className="text-xs font-medium text-slate-500 uppercase">
+                                                            {round.investmentType === 'BSA_Air' ? 'Valuation Cap (Max)' : 'Valuation Cap'}
+                                                        </label>
+                                                        <div className="relative mt-1">
+                                                            <DollarSign className="w-3 h-3 absolute left-2 top-1/2 -translate-y-1/2 text-slate-400" />
+                                                            <FormattedInput
+                                                                value={round.valuationCap}
+                                                                onChange={(val) => updateRound(round.id, { valuationCap: val })}
+                                                                className="w-full pl-6 pr-2 py-1 text-sm border border-slate-200 rounded bg-white focus:ring-2 focus:ring-blue-500 outline-none"
+                                                                placeholder="Optional"
+                                                            />
+                                                        </div>
+                                                    </div>
+
+                                                    {/* Valuation Floor (BSA Air only) */}
+                                                    {round.investmentType === 'BSA_Air' && (
+                                                        <div>
+                                                            <label className="text-xs font-medium text-slate-500 uppercase">Valuation Floor (Min)</label>
+                                                            <div className="relative mt-1">
+                                                                <DollarSign className="w-3 h-3 absolute left-2 top-1/2 -translate-y-1/2 text-slate-400" />
+                                                                <FormattedInput
+                                                                    value={round.valuationFloor}
+                                                                    onChange={(val) => updateRound(round.id, { valuationFloor: val })}
+                                                                    className="w-full pl-6 pr-2 py-1 text-sm border border-slate-200 rounded bg-white focus:ring-2 focus:ring-blue-500 outline-none"
+                                                                    placeholder="Optional"
+                                                                />
+                                                            </div>
+                                                        </div>
+                                                    )}
+
+                                                    {/* Discount (Common to all) */}
+                                                    <div>
+                                                        <label className="text-xs font-medium text-slate-500 uppercase">Discount (%)</label>
+                                                        <div className="relative mt-1">
+                                                            <input
+                                                                type="number"
+                                                                value={round.discount || ''}
+                                                                onChange={(e) => updateRound(round.id, { discount: parseFloat(e.target.value) })}
+                                                                className="w-full px-2 py-1 text-sm border border-slate-200 rounded bg-white focus:ring-2 focus:ring-blue-500 outline-none"
+                                                                placeholder="e.g. 20"
+                                                            />
+                                                            <span className="absolute right-2 top-1/2 -translate-y-1/2 text-slate-400 text-xs">%</span>
+                                                        </div>
+                                                    </div>
+
+                                                    {/* Interest Rate (Convertible Note only) */}
+                                                    {round.investmentType === 'ConvertibleNote' && (
+                                                        <div>
+                                                            <label className="text-xs font-medium text-slate-500 uppercase">Interest Rate (%)</label>
+                                                            <div className="relative mt-1">
+                                                                <input
+                                                                    type="number"
+                                                                    value={round.interestRate || ''}
+                                                                    onChange={(e) => updateRound(round.id, { interestRate: parseFloat(e.target.value) })}
+                                                                    className="w-full px-2 py-1 text-sm border border-slate-200 rounded bg-white focus:ring-2 focus:ring-blue-500 outline-none"
+                                                                    placeholder="e.g. 5"
+                                                                />
+                                                                <span className="absolute right-2 top-1/2 -translate-y-1/2 text-slate-400 text-xs">%</span>
+                                                            </div>
+                                                        </div>
+                                                    )}
+
+                                                    {/* Conversion Trigger (Common to all) */}
+                                                    <div>
+                                                        <label className="text-xs font-medium text-slate-500 uppercase">Conversion Trigger</label>
+                                                        <input
+                                                            type="text"
+                                                            value={round.conversionTrigger || ''}
+                                                            onChange={(e) => updateRound(round.id, { conversionTrigger: e.target.value })}
+                                                            className="w-full px-2 py-1 text-sm border border-slate-200 rounded bg-white focus:ring-2 focus:ring-blue-500 outline-none mt-1"
+                                                            placeholder="e.g. Next Equity Round"
+                                                        />
+                                                    </div>
+                                                </div>
+                                            )}
+                                        </div>
+                                    </div>
+                                </div>
+
+                                {/* Expanded Investments List */}
+                                <div className={`transition-all duration-500 ease-in-out overflow-hidden flex flex-col ${!isCollapsed ? 'max-h-[800px] opacity-100' : 'max-h-0 opacity-0'}`}>
+                                    <div className="p-4 flex-1 overflow-y-auto max-h-96">
+                                        <h4 className="text-xs font-bold text-slate-400 uppercase mb-3">Investments</h4>
+                                        <div className="space-y-3">
+                                            {capTable.shareholders.map(s => {
+                                                const investment = round.investments.find(i => i.shareholderId === s.id);
+                                                className = "text-blue-600 hover:text-blue-700 text-xs font-semibold"
+                                                    >
+                                                    { showOptionPool.has(round.id) ? '− Hide' : '+ Show' }
+                                                            </button>
+                                    </label>
+                                    {showOptionPool.has(round.id) && (
+                                        <>
+                                            <div className="flex bg-slate-100 rounded p-0.5 mt-2">
+                                                <button
+                                                    onClick={() => updateRound(round.id, { poolMode: 'percent' })}
+                                                    className={`px-2 py-0.5 text-[10px] rounded flex-1 ${!round.poolMode || round.poolMode === 'percent' ? 'bg-white shadow text-blue-600 font-bold' : 'text-slate-400'}`}
+                                                >
+                                                    %
+                                                </button>
+                                                <button
+                                                    onClick={() => updateRound(round.id, { poolMode: 'shares' })}
+                                                    className={`px-2 py-0.5 text-[10px] rounded flex-1 ${round.poolMode === 'shares' ? 'bg-white shadow text-blue-600 font-bold' : 'text-slate-400'}`}
+                                                >
+                                                    Shares
+                                                </button>
+                                            </div>
+                                            <div className="relative mt-1">
+                                                {round.poolMode === 'shares' ? (
+                                                    <>
+                                                        <span className="absolute left-2 top-1/2 -translate-y-1/2 text-slate-400 text-xs">#</span>
+                                                        <FormattedInput
+                                                            value={round.poolSize}
+                                                            onChange={(val) => updateRound(round.id, { poolSize: val })}
+                                                            className="w-full pl-5 pr-2 py-1 text-sm border border-slate-200 rounded bg-white focus:ring-2 focus:ring-blue-500 outline-none"
+                                                        />
+                                                    </>
+                                                ) : (
+                                                    <>
+                                                        <span className="absolute left-2 top-1/2 -translate-y-1/2 text-slate-400 text-xs">%</span>
+                                                        <FormattedInput
+                                                            value={round.poolPercent}
+                                                            onChange={(val) => updateRound(round.id, { poolPercent: val })}
+                                                            className="w-full pl-5 pr-2 py-1 text-sm border border-slate-200 rounded bg-white focus:ring-2 focus:ring-blue-500 outline-none"
+                                                        />
+                                                    </>
+                                                )}
+                                            </div>
+                                            <input
+                                                type="text"
+                                                value={round.poolClass || ''}
+                                                onChange={(e) => updateRound(round.id, { poolClass: e.target.value })}
+                                                className="w-full px-2 py-1 text-xs border border-slate-200 rounded bg-white focus:ring-2 focus:ring-blue-500 outline-none mt-1"
+                                                placeholder="Pool label (e.g., Pool 1, BSPCE 2023)"
+                                            />
+                                        </>
+                                    )}
+                                </div>
+
+                                {/* Liquidation Preference */}
+                                <div className="pt-2 border-t border-slate-100">
+                                    <label className="text-xs font-medium text-slate-500 uppercase flex items-center justify-between">
+                                        <span>Liquidation Preference</span>
+                                        <button
+                                            onClick={() => {
+                                                const newSet = new Set(showLiqPref);
+                                                if (newSet.has(round.id)) {
+                                                    newSet.delete(round.id);
+                                                } else {
+                                                    newSet.add(round.id);
+                                                }
+                                                setShowLiqPref(newSet);
+                                            }}
+                                            className="text-blue-600 hover:text-blue-700 text-xs font-semibold"
+                                        >
+                                            {showLiqPref.has(round.id) ? '− Hide' : '+ Show'}
+                                        </button>
+                                    </label>
+                                    {showLiqPref.has(round.id) && (
+                                        <div className="grid grid-cols-2 gap-3 mt-2">
+                                            <div className="flex items-center">
+                                                <label className="flex items-center gap-2 cursor-pointer">
+                                                    <input
+                                                        type="checkbox"
+                                                        checked={round.isParticipating || false}
+                                                        onChange={(e) => updateRound(round.id, { isParticipating: e.target.checked })}
+                                                        className="w-4 h-4 text-blue-600 rounded border-slate-300 focus:ring-blue-500"
+                                                    />
+                                                    <span className="text-xs font-medium text-slate-600">Participating</span>
+                                                </label>
+                                            </div>
+                                            <div>
+                                                <label className="text-xs font-medium text-slate-500 uppercase">Multiple (x)</label>
+                                                <div className="relative mt-1">
+                                                    <input
+                                                        type="number"
+                                                        step="0.1"
+                                                        value={round.liquidationPreferenceMultiple ?? 1}
+                                                        onChange={(e) => updateRound(round.id, { liquidationPreferenceMultiple: parseFloat(e.target.value) })}
+                                                        className="w-full px-2 py-1 text-sm border border-slate-200 rounded bg-white focus:ring-2 focus:ring-blue-500 outline-none"
+                                                    />
+                                                    <span className="absolute right-2 top-1/2 -translate-y-1/2 text-slate-400 text-xs">x</span>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    )}
+                                </div>
+                            </>
+                        )
+                    }
+
+                                            {/* SAFE / Convertible Note / BSA Air Fields */ }
+                                            {
+                            round.investmentType !== 'Equity' && round.investmentType && (
+                                <div className="space-y-3 bg-slate-50 p-3 rounded-lg border border-slate-100">
+                                    {/* Valuation Cap (Common to all) */}
+                                    <div>
+                                        <label className="text-xs font-medium text-slate-500 uppercase">
+                                            {round.investmentType === 'BSA_Air' ? 'Valuation Cap (Max)' : 'Valuation Cap'}
+                                        </label>
+                                        <div className="relative mt-1">
+                                            <DollarSign className="w-3 h-3 absolute left-2 top-1/2 -translate-y-1/2 text-slate-400" />
+                                            <FormattedInput
+                                                value={round.valuationCap}
+                                                onChange={(val) => updateRound(round.id, { valuationCap: val })}
+                                                className="w-full pl-6 pr-2 py-1 text-sm border border-slate-200 rounded bg-white focus:ring-2 focus:ring-blue-500 outline-none"
+                                                placeholder="Optional"
+                                            />
+                                        </div>
+                                    </div>
+
+                                    {/* Valuation Floor (BSA Air only) */}
+                                    {round.investmentType === 'BSA_Air' && (
+                                        <div>
+                                            <label className="text-xs font-medium text-slate-500 uppercase">Valuation Floor (Min)</label>
+                                            <div className="relative mt-1">
+                                                <DollarSign className="w-3 h-3 absolute left-2 top-1/2 -translate-y-1/2 text-slate-400" />
+                                                <FormattedInput
+                                                    value={round.valuationFloor}
+                                                    onChange={(val) => updateRound(round.id, { valuationFloor: val })}
+                                                    className="w-full pl-6 pr-2 py-1 text-sm border border-slate-200 rounded bg-white focus:ring-2 focus:ring-blue-500 outline-none"
+                                                    placeholder="Optional"
+                                                />
+                                            </div>
+                                        </div>
+                                    )}
+
+                                    {/* Discount (Common to all) */}
+                                    <div>
+                                        <label className="text-xs font-medium text-slate-500 uppercase">Discount (%)</label>
+                                        <div className="relative mt-1">
+                                            <input
+                                                type="number"
+                                                value={round.discount || ''}
+                                                onChange={(e) => updateRound(round.id, { discount: parseFloat(e.target.value) })}
+                                                className="w-full px-2 py-1 text-sm border border-slate-200 rounded bg-white focus:ring-2 focus:ring-blue-500 outline-none"
+                                                placeholder="e.g. 20"
+                                            />
+                                            <span className="absolute right-2 top-1/2 -translate-y-1/2 text-slate-400 text-xs">%</span>
+                                        </div>
+                                    </div>
+
+                                    {/* Interest Rate (Convertible Note only) */}
+                                    {round.investmentType === 'ConvertibleNote' && (
+                                        <div>
+                                            <label className="text-xs font-medium text-slate-500 uppercase">Interest Rate (%)</label>
+                                            <div className="relative mt-1">
+                                                <input
+                                                    type="number"
+                                                    value={round.interestRate || ''}
+                                                    onChange={(e) => updateRound(round.id, { interestRate: parseFloat(e.target.value) })}
+                                                    className="w-full px-2 py-1 text-sm border border-slate-200 rounded bg-white focus:ring-2 focus:ring-blue-500 outline-none"
+                                                    placeholder="e.g. 5"
+                                                />
+                                                <span className="absolute right-2 top-1/2 -translate-y-1/2 text-slate-400 text-xs">%</span>
+                                            </div>
+                                        </div>
+                                    )}
+
+                                    {/* Conversion Trigger (Common to all) */}
+                                    <div>
+                                        <label className="text-xs font-medium text-slate-500 uppercase">Conversion Trigger</label>
+                                        <input
+                                            type="text"
+                                            value={round.conversionTrigger || ''}
+                                            onChange={(e) => updateRound(round.id, { conversionTrigger: e.target.value })}
+                                            className="w-full px-2 py-1 text-sm border border-slate-200 rounded bg-white focus:ring-2 focus:ring-blue-500 outline-none mt-1"
+                                            placeholder="e.g. Next Equity Round"
+                                        />
+                                    </div>
+                                </div>
+                            )
+                        }
+                                        </div>
+            </div>
+        </div>
+
+                                {/* Expanded Investments List */ }
+    <div className={`transition-all duration-500 ease-in-out overflow-hidden flex flex-col ${!isCollapsed ? 'max-h-[800px] opacity-100' : 'max-h-0 opacity-0'}`}>
+        <div className="p-4 flex-1 overflow-y-auto max-h-96">
+            <h4 className="text-xs font-bold text-slate-400 uppercase mb-3">Investments</h4>
+            <div className="space-y-3">
+                {capTable.shareholders.map(s => {
+                    const investment = round.investments.find(i => i.shareholderId === s.id);
+                    // Calculate shares if price is available
+                    const calculatedShares = (round.calculatedPricePerShare && round.calculatedPricePerShare > 0 && investment?.amount)
+                        ? Math.floor(investment.amount / round.calculatedPricePerShare)
+                        : null;
+
+                    return (
+                        <div key={s.id} className="flex items-center justify-between text-sm gap-2">
+                            <span className="text-slate-600 truncate w-24" title={s.name}>{s.name}</span>
+
+                            <div className="flex gap-2 flex-1">
+                                {/* Amount Input */}
+                                <div className="relative flex-1">
+                                    <span className="absolute left-2 top-1/2 -translate-y-1/2 text-slate-400 text-xs">$</span>
+                                    <FormattedInput
+                                        placeholder="Amount"
+                                        value={investment?.amount}
+                                        onChange={(val) => updateInvestment(round.id, s.id, { amount: val })}
+                                        className="w-full pl-4 pr-1 py-1 text-right border border-slate-200 rounded focus:ring-1 focus:ring-blue-500 outline-none text-xs"
+                                    />
+                                </div>
+
+                                {/* Shares Display (auto-calculated, read-only) */}
+                                <div className="relative flex-1">
+                                    <span className="absolute left-2 top-1/2 -translate-y-1/2 text-slate-400 text-xs">#</span>
+                                    <input
+                                        type="text"
+                                        value={calculatedShares !== null ? formatNumberInput(calculatedShares) : ''}
+                                        readOnly
+                                        placeholder="Shares"
+                                        className="w-full pl-4 pr-1 py-1 text-right border border-slate-200 rounded outline-none text-xs bg-blue-50 text-blue-700 font-medium cursor-not-allowed"
+                                    />
+                                </div>
+                            </div>
+                        </div>
+                    );
+                })}
+
+                {/* Add New Investor Form */}
+                {addingInvestorToRound === round.id ? (
+                    <div className="border-2 border-blue-300 bg-blue-50 rounded-lg p-3 space-y-2">
+                        <div className="text-xs font-bold text-blue-900 mb-2">Add New Investor</div>
+
+                        {/* Name Input with Autocomplete */}
+                        <div>
+                            <label className="text-xs text-slate-600 block mb-1">Shareholder Name</label>
+                            <input
+                                type="text"
+                                value={newInvestorName}
+                                onChange={(e) => setNewInvestorName(e.target.value)}
+                                placeholder="Enter name"
+                                className="w-full px-2 py-1 text-sm border border-slate-300 rounded focus:ring-2 focus:ring-blue-500 outline-none"
+                                autoFocus
+                                list={`shareholders-${round.id}`}
+                            />
+                            <datalist id={`shareholders-${round.id}`}>
+                                {capTable.shareholders.map(s => (
+                                    <option key={s.id} value={s.name} />
+                                ))}
+                            </datalist>
+                        </div>
+
+                        {/* Role Selector */}
+                        <div>
+                            <label className="text-xs text-slate-600 block mb-1">Role</label>
+                            <select
+                                value={newInvestorRole}
+                                onChange={(e) => setNewInvestorRole(e.target.value as any)}
+                                className="w-full px-2 py-1 text-sm border border-slate-300 rounded focus:ring-2 focus:ring-blue-500 outline-none"
+                            >
+                                <option value="Angel">Angel</option>
+                                <option value="VC">VC</option>
+                                <option value="Founder">Founder</option>
+                                <option value="Employee">Employee</option>
+                                <option value="Advisor">Advisor</option>
+                            </select>
+                        </div>
+
+                        {/* Amount Input */}
+                        <div>
+                            <label className="text-xs text-slate-600 block mb-1">Investment Amount</label>
+                            <div className="relative">
+                                <span className="absolute left-2 top-1/2 -translate-y-1/2 text-slate-400 text-xs">$</span>
+                                <FormattedInput
+                                    value={newInvestorAmount}
+                                    onChange={setNewInvestorAmount}
+                                    placeholder="0"
+                                    className="w-full pl-5 pr-2 py-1 text-sm border border-slate-300 rounded focus:ring-2 focus:ring-blue-500 outline-none"
+                                />
+                            </div>
+                        </div>
+
+                        {/* Action Buttons */}
+                        <div className="flex gap-2 pt-2">
+                            <button
+                                onClick={() => saveNewInvestor(round.id)}
+                                className="flex-1 px-3 py-1.5 bg-blue-600 text-white text-xs font-medium rounded hover:bg-blue-700 transition-colors"
+                            >
+                                Save
+                            </button>
+                            <button
+                                onClick={cancelAddingInvestor}
+                                className="flex-1 px-3 py-1.5 bg-slate-200 text-slate-700 text-xs font-medium rounded hover:bg-slate-300 transition-colors"
+                            >
+                                Cancel
+                            </button>
+                        </div>
+                    </div>
+                ) : (
+                    <button
+                        onClick={() => startAddingInvestor(round.id)}
+                        className="w-full py-2 border-2 border-dashed border-slate-300 rounded-lg text-slate-400 hover:border-blue-400 hover:text-blue-500 hover:bg-blue-50 transition-all flex items-center justify-center gap-2 text-sm font-medium"
+                    >
+                        <Plus className="w-4 h-4" />
+                        Add Investor
+                    </button>
+                )}
+            </div>
+        </div>
+
+        <div className="p-3 bg-slate-50 border-t border-slate-200 rounded-b-xl text-center mt-auto">
+            <div className="text-xs text-slate-500">Post-Money</div>
+            <div className="font-bold text-slate-700">
+                {formatCurrency((round.preMoneyValuation || 0) + round.investments.reduce((acc, i) => acc + i.amount, 0))}
+            </div>
+        </div>
+    </div>
+                            </div >
+                        );
+                    })}
+
+<button
+    onClick={addRound}
+    className="w-12 flex items-center justify-center rounded-xl border-2 border-dashed border-slate-200 text-slate-400 hover:border-blue-400 hover:text-blue-500 transition-colors"
+>
+    <Plus className="w-6 h-6" />
+</button>
+                </div >
+            </div >
+        </div >
+    );
+};
