@@ -5,6 +5,7 @@ import { ShareholderManager } from './ShareholderManager';
 import { RoundManager } from './RoundManager';
 import { OptionPoolManager } from './OptionPoolManager';
 import { formatCurrency, formatNumber, formatPercent } from '../../utils';
+import { CapTableCharts } from './CapTableCharts';
 
 interface CapTableViewProps {
     capTable: CapTable;
@@ -278,6 +279,9 @@ export const CapTableView: React.FC<CapTableViewProps> = ({ capTable, setCapTabl
                     </table>
                 </div>
             </div>
+
+            {/* Cap Table Charts */}
+            <CapTableCharts capTable={capTable} />
 
             {/* Convertible Instruments Summary */}
             {convertibleRounds.length > 0 && (
