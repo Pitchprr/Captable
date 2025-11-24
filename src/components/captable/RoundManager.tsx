@@ -9,6 +9,8 @@ interface RoundManagerProps {
     capTable: CapTable;
     onUpdate: (rounds: Round[]) => void;
     onCapTableUpdate: (capTable: CapTable) => void;
+    onGlobalCollapse?: () => void;
+    onGlobalExpand?: () => void;
 }
 
 const FormattedInput = ({
@@ -38,7 +40,7 @@ const FormattedInput = ({
     );
 };
 
-export const RoundManager: React.FC<RoundManagerProps> = ({ capTable, onUpdate, onCapTableUpdate }) => {
+export const RoundManager: React.FC<RoundManagerProps> = ({ capTable, onUpdate, onCapTableUpdate, onGlobalCollapse, onGlobalExpand }) => {
     const [collapsedRounds, setCollapsedRounds] = useState<Set<string>>(new Set());
     const [showOptionPool, setShowOptionPool] = useState<Set<string>>(new Set());
     const [showLiqPref, setShowLiqPref] = useState<Set<string>>(new Set());
@@ -258,10 +260,12 @@ export const RoundManager: React.FC<RoundManagerProps> = ({ capTable, onUpdate, 
     const collapseAll = () => {
         const newCollapsed = new Set(capTable.rounds.map(r => r.id));
         setCollapsedRounds(newCollapsed);
+        if (onGlobalCollapse) onGlobalCollapse();
     };
 
     const expandAll = () => {
         setCollapsedRounds(new Set());
+        if (onGlobalExpand) onGlobalExpand();
     };
 
     return (
@@ -649,7 +653,10 @@ export const RoundManager: React.FC<RoundManagerProps> = ({ capTable, onUpdate, 
                                     <div className="p-4 flex-1 overflow-y-auto max-h-96">
                                         <h4 className="text-xs font-bold text-slate-400 uppercase mb-3">Investments</h4>
                                         <div className="space-y-3">
-                                            $investmentsSection = @'
+                                            <div className="flex justify-between items-center pb-2 border-b border-slate-100 mb-2">
+                                                <span className="text-xs font-semibold text-slate-500 uppercase">Total Round Amount</span>
+                                                <span className="text-sm font-bold text-slate-700">{formatCurrency(totalInvested)}</span>
+                                            </div>
                                             {capTable.shareholders.map(s => {
                                                 const investment = round.investments.find(i => i.shareholderId === s.id);
                                                 // Calculate shares if price is available

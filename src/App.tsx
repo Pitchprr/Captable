@@ -348,6 +348,21 @@ function App() {
           </div>
         </div>
 
+        <div className="px-6 py-4 border-b border-slate-800 space-y-4">
+          <div>
+            <p className="text-xs text-slate-400 uppercase font-semibold mb-1">Total Raised</p>
+            <p className="text-xl font-bold text-blue-400">
+              ${(capTable.rounds.reduce((acc, round) => acc + round.investments.reduce((iAcc, inv) => iAcc + inv.amount, 0), 0) / 1000000).toFixed(1)}M
+            </p>
+          </div>
+          <div>
+            <p className="text-xs text-slate-400 uppercase font-semibold mb-1">Current Valuation</p>
+            <p className="text-xl font-bold text-green-400">
+              ${(postMoneyValuation / 1000000).toFixed(1)}M
+            </p>
+          </div>
+        </div>
+
         <nav className="flex-1 p-4 space-y-2">
           <button
             onClick={() => setActiveTab('captable')}
@@ -372,14 +387,7 @@ function App() {
           </button>
         </nav>
 
-        <div className="p-4 border-t border-slate-800">
-          <div className="bg-slate-800 rounded-lg p-4">
-            <p className="text-xs text-slate-400 uppercase font-semibold mb-1">Current Valuation</p>
-            <p className="text-xl font-bold text-green-400">
-              ${(postMoneyValuation / 1000000).toFixed(1)}M
-            </p>
-          </div>
-        </div>
+
       </aside>
 
       {/* Main Content */}
@@ -425,9 +433,10 @@ function App() {
           </div>
         </header>
 
-        {/* Content Area */}
         <div className="flex-1 overflow-auto p-8">
           <div className="max-w-7xl mx-auto">
+
+
             {activeTab === 'captable' ? (
               capTable.rounds.length === 0 ? (
                 <FounderSetup onComplete={(initialData) => handleCapTableUpdate(initialData)} />

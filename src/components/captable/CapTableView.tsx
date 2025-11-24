@@ -58,19 +58,49 @@ export const CapTableView: React.FC<CapTableViewProps> = ({ capTable, setCapTabl
 
     const convertibleRounds = capTable.rounds.filter(r => r.investmentType && r.investmentType !== 'Equity');
 
+    const [isShareholdersCollapsed, setIsShareholdersCollapsed] = React.useState(false);
+    const [isOptionPoolsCollapsed, setIsOptionPoolsCollapsed] = React.useState(false);
+
+    const handleGlobalCollapse = () => {
+        setIsShareholdersCollapsed(true);
+        setIsOptionPoolsCollapsed(true);
+    };
+
+    const handleGlobalExpand = () => {
+        setIsShareholdersCollapsed(false);
+        setIsOptionPoolsCollapsed(false);
+    };
+
     return (
         <div className="space-y-8">
             <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
                 <div className="lg:col-span-1">
-                    <ShareholderManager shareholders={capTable.shareholders} onUpdate={updateShareholders} />
+                    <ShareholderManager
+                        shareholders={capTable.shareholders}
+                        onUpdate={updateShareholders}
+                        isCollapsed={isShareholdersCollapsed}
+                        onToggleCollapse={() => setIsShareholdersCollapsed(!isShareholdersCollapsed)}
+                    />
                 </div>
                 <div className="lg:col-span-2">
-                    <RoundManager capTable={capTable} onUpdate={updateRounds} onCapTableUpdate={setCapTable} />
+                    <RoundManager
+                        capTable={capTable}
+                        onUpdate={updateRounds}
+                        onCapTableUpdate={setCapTable}
+                        onGlobalCollapse={handleGlobalCollapse}
+                        onGlobalExpand={handleGlobalExpand}
+                    />
                 </div>
             </div>
 
             {/* Option Pool Management */}
-            <OptionPoolManager capTable={capTable} onUpdate={updateOptionGrants} onUpdateRounds={updateRounds} />
+            <OptionPoolManager
+                capTable={capTable}
+                onUpdate={updateOptionGrants}
+                onUpdateRounds={updateRounds}
+                isCollapsed={isOptionPoolsCollapsed}
+                onToggleCollapse={() => setIsOptionPoolsCollapsed(!isOptionPoolsCollapsed)}
+            />
 
             <div className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
                 <div className="px-6 py-4 border-b border-slate-200 bg-slate-50 flex justify-between items-center">
