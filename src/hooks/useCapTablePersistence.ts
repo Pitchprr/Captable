@@ -20,6 +20,7 @@ export const useCapTablePersistence = (
     const autoSaveTimerRef = useRef<number | null>(null);
     const hasLoadedFromUrlRef = useRef(false);
     const [lastSaveTime, setLastSaveTime] = useState<Date | null>(null);
+    const [shouldUpdateUrl, setShouldUpdateUrl] = useState(false);
 
     // Compress and encode state for URL
     const encodeStateToUrl = useCallback((state: PersistedState): string => {
@@ -80,12 +81,17 @@ export const useCapTablePersistence = (
         try {
             const url = generateShareUrl();
             await navigator.clipboard.writeText(url);
+            // Enable auto-update of URL hash from now on
+            setShouldUpdateUrl(true);
+            // Also immediately update the URL
+            const encoded = encodeStateToUrl(state);
+            window.history.replaceState(null, '', `#data=${encoded}`);
             return true;
         } catch (error) {
             console.error('Failed to copy to clipboard:', error);
             return false;
         }
-    }, [generateShareUrl]);
+    }, [generateShareUrl, encodeStateToUrl, state]);
 
     // Load state on mount (from URL or localStorage)
     useEffect(() => {
@@ -101,6 +107,8 @@ export const useCapTablePersistence = (
             if (loadedState) {
                 console.log('Loaded state from URL');
                 onStateLoad(loadedState);
+                // Enable auto-update since we loaded from URL
+                setShouldUpdateUrl(true);
                 return;
             }
         }
@@ -124,8 +132,8 @@ export const useCapTablePersistence = (
         autoSaveTimerRef.current = setTimeout(() => {
             saveToLocalStorage(state);
 
-            // Also update URL hash if we're already on a shared URL
-            if (window.location.hash.startsWith('#data=')) {
+            // Update URL hash if enabled (after first share or loaded from URL)
+            if (shouldUpdateUrl) {
                 const encoded = encodeStateToUrl(state);
                 window.history.replaceState(null, '', `#data=${encoded}`);
             }
@@ -137,7 +145,7 @@ export const useCapTablePersistence = (
                 clearTimeout(autoSaveTimerRef.current);
             }
         };
-    }, [state, saveToLocalStorage, encodeStateToUrl]);
+    }, [state, saveToLocalStorage, encodeStateToUrl, shouldUpdateUrl]);
 
     return {
         generateShareUrl,
