@@ -40,6 +40,7 @@ export interface Round {
     poolMode?: 'shares' | 'percent'; // Toggle state
     poolClass?: string; // Label for the option pool (e.g., "Pool 1", "BSPCE 2023")
     strikePrice?: number; // Strike price for options (defaults to PPS of the round)
+    optionStrikePrice?: number; // Alternative field for option strike price
 
     // Liquidation Preference
     liquidationPreferenceMultiple?: number; // e.g. 1 for 1x, 2 for 2x. Default 1.
@@ -60,6 +61,8 @@ export interface OptionGrant {
     id: string;
     shareholderId: string;
     roundId: string; // From which round's pool
+    name?: string; // Name of the grant recipient
+    role?: 'Employee' | 'Advisor'; // Role of the grant recipient
     shares: number; // Number of options granted
     grantDate: string;
     vestingMonths?: number; // e.g., 48 months

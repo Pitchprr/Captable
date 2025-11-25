@@ -35,7 +35,7 @@ export const exportToExcel = async (
         properties: { tabColor: { argb: 'FF4472C4' } }
     });
 
-    const { summary, totalSharesOutstanding, finalSharePrice, postMoneyValuation } =
+    const { summary, finalSharePrice } =
         calculateCapTableState(capTable);
 
     let currentRow = 1;

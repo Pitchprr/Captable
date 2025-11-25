@@ -13,7 +13,7 @@ interface CapTableViewProps {
 }
 
 export const CapTableView: React.FC<CapTableViewProps> = ({ capTable, setCapTable }) => {
-    const { summary, totalSharesOutstanding, totalSharesNonDiluted, totalPoolShares, postMoneyValuation } = calculateCapTableState(capTable);
+    const { summary, totalSharesOutstanding, totalSharesNonDiluted, postMoneyValuation } = calculateCapTableState(capTable);
 
     const updateShareholders = (shareholders: Shareholder[]) => {
         setCapTable(prev => ({ ...prev, shareholders }));
