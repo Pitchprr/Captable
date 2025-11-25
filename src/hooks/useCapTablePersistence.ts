@@ -15,7 +15,7 @@ const AUTOSAVE_DELAY = 3000; // 3 seconds
 
 export const useCapTablePersistence = (
     state: PersistedState,
-    onStateLoad: (state: PersistedState) => void
+    onStateLoad: (state: PersistedState | null) => void
 ) => {
     const autoSaveTimerRef = useRef<number | null>(null);
     const hasLoadedFromUrlRef = useRef(false);
@@ -98,27 +98,31 @@ export const useCapTablePersistence = (
         if (hasLoadedFromUrlRef.current) return;
         hasLoadedFromUrlRef.current = true;
 
+        let loadedState: PersistedState | null = null;
+
         // Check URL hash first
         const hash = window.location.hash;
         if (hash.startsWith('#data=')) {
             const encoded = hash.substring(6); // Remove '#data='
-            const loadedState = decodeStateFromUrl(encoded);
+            loadedState = decodeStateFromUrl(encoded);
 
             if (loadedState) {
                 console.log('Loaded state from URL');
-                onStateLoad(loadedState);
                 // Enable auto-update since we loaded from URL
                 setShouldUpdateUrl(true);
-                return;
             }
         }
 
-        // Fallback to localStorage
-        const localState = loadFromLocalStorage();
-        if (localState) {
-            console.log('Loaded state from localStorage');
-            onStateLoad(localState);
+        // Fallback to localStorage if no URL data
+        if (!loadedState) {
+            loadedState = loadFromLocalStorage();
+            if (loadedState) {
+                console.log('Loaded state from localStorage');
+            }
         }
+
+        // Always call onStateLoad to signal loading completion
+        onStateLoad(loadedState);
     }, [decodeStateFromUrl, loadFromLocalStorage, onStateLoad]);
 
     // Auto-save to localStorage with debounce

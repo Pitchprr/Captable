@@ -131,6 +131,7 @@ function App() {
 
   const [isResetModalOpen, setIsResetModalOpen] = useState(false);
   const [shareUrlCopied, setShareUrlCopied] = useState(false);
+  const [isLoadingFromPersistence, setIsLoadingFromPersistence] = useState(true);
 
   // Persistence hook
   const { copyShareUrl, lastSaveTime } = useCapTablePersistence(
@@ -142,11 +143,15 @@ function App() {
       exitValuation
     },
     (loadedState) => {
-      setCapTable(loadedState.capTable);
-      setPreferences(loadedState.preferences);
-      setCarveOutPercent(loadedState.carveOutPercent);
-      setCarveOutBeneficiary(loadedState.carveOutBeneficiary);
-      setExitValuation(loadedState.exitValuation);
+      if (loadedState) {
+        setCapTable(loadedState.capTable);
+        setPreferences(loadedState.preferences);
+        setCarveOutPercent(loadedState.carveOutPercent);
+        setCarveOutBeneficiary(loadedState.carveOutBeneficiary);
+        setExitValuation(loadedState.exitValuation);
+      }
+      // Always mark loading as complete after a short delay to let state settle
+      setTimeout(() => setIsLoadingFromPersistence(false), 100);
     }
   );
 
@@ -157,6 +162,9 @@ function App() {
 
   // Auto-sync liquidation preferences from rounds
   useEffect(() => {
+    // Skip auto-sync during initial load to avoid overwriting loaded data
+    if (isLoadingFromPersistence) return;
+
     const newPreferences: LiquidationPreference[] = [];
 
     capTable.rounds.forEach((round, index) => {
@@ -199,10 +207,13 @@ function App() {
     if (JSON.stringify(newPreferences) !== JSON.stringify(preferences)) {
       setPreferences(newPreferences);
     }
-  }, [capTable.rounds]); // Only depend on rounds, not preferences to avoid loop
+  }, [capTable.rounds, isLoadingFromPersistence]); // Add isLoadingFromPersistence dependency
 
   // Sync preferences back to rounds (Waterfall → Cap Table)
   useEffect(() => {
+    // Skip auto-sync during initial load to avoid overwriting loaded data
+    if (isLoadingFromPersistence) return;
+
     let hasChanges = false;
     const updatedRounds = capTable.rounds.map(round => {
       const pref = preferences.find(p => p.roundId === round.id);
