@@ -20,7 +20,6 @@ export const useCapTablePersistence = (
     const autoSaveTimerRef = useRef<number | null>(null);
     const hasLoadedFromUrlRef = useRef(false);
     const [lastSaveTime, setLastSaveTime] = useState<Date | null>(null);
-    const [shouldUpdateUrl, setShouldUpdateUrl] = useState(false);
 
     // Compress and encode state for URL
     const encodeStateToUrl = useCallback((state: PersistedState): string => {
@@ -69,29 +68,29 @@ export const useCapTablePersistence = (
         }
     }, []);
 
-    // Generate shareable URL
-    const generateShareUrl = useCallback((): string => {
+    // Generate shareable URL and update browser URL
+    const generateAndUpdateShareUrl = useCallback((): string => {
         const encoded = encodeStateToUrl(state);
         const baseUrl = window.location.origin + window.location.pathname;
-        return `${baseUrl}#data=${encoded}`;
+        const fullUrl = `${baseUrl}#data=${encoded}`;
+
+        // Update browser URL immediately
+        window.history.replaceState(null, '', `#data=${encoded}`);
+
+        return fullUrl;
     }, [state, encodeStateToUrl]);
 
     // Copy share URL to clipboard
     const copyShareUrl = useCallback(async (): Promise<boolean> => {
         try {
-            const url = generateShareUrl();
+            const url = generateAndUpdateShareUrl();
             await navigator.clipboard.writeText(url);
-            // Enable auto-update of URL hash from now on
-            setShouldUpdateUrl(true);
-            // Also immediately update the URL
-            const encoded = encodeStateToUrl(state);
-            window.history.replaceState(null, '', `#data=${encoded}`);
             return true;
         } catch (error) {
             console.error('Failed to copy to clipboard:', error);
             return false;
         }
-    }, [generateShareUrl, encodeStateToUrl, state]);
+    }, [generateAndUpdateShareUrl]);
 
     // Load state on mount (from URL or localStorage)
     useEffect(() => {
@@ -108,8 +107,6 @@ export const useCapTablePersistence = (
 
             if (loadedState) {
                 console.log('Loaded state from URL');
-                // Enable auto-update since we loaded from URL
-                setShouldUpdateUrl(true);
             }
         }
 
@@ -125,7 +122,7 @@ export const useCapTablePersistence = (
         onStateLoad(loadedState);
     }, [decodeStateFromUrl, loadFromLocalStorage, onStateLoad]);
 
-    // Auto-save to localStorage with debounce
+    // Auto-save to localStorage only (not URL)
     useEffect(() => {
         // Clear existing timer
         if (autoSaveTimerRef.current) {
@@ -135,12 +132,6 @@ export const useCapTablePersistence = (
         // Set new timer
         autoSaveTimerRef.current = setTimeout(() => {
             saveToLocalStorage(state);
-
-            // Update URL hash if enabled (after first share or loaded from URL)
-            if (shouldUpdateUrl) {
-                const encoded = encodeStateToUrl(state);
-                window.history.replaceState(null, '', `#data=${encoded}`);
-            }
         }, AUTOSAVE_DELAY);
 
         // Cleanup
@@ -149,12 +140,10 @@ export const useCapTablePersistence = (
                 clearTimeout(autoSaveTimerRef.current);
             }
         };
-    }, [state, saveToLocalStorage, encodeStateToUrl, shouldUpdateUrl]);
+    }, [state, saveToLocalStorage]);
 
     return {
-        generateShareUrl,
         copyShareUrl,
-        saveToLocalStorage: () => saveToLocalStorage(state),
         lastSaveTime,
     };
 };

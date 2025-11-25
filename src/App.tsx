@@ -284,7 +284,7 @@ function App() {
     const success = await copyShareUrl();
     if (success) {
       setShareUrlCopied(true);
-      setTimeout(() => setShareUrlCopied(false), 2000);
+      setTimeout(() => setShareUrlCopied(false), 3000); // Show for 3 seconds
     }
   };
 
@@ -480,24 +480,30 @@ function App() {
                 onClick={handleShare}
                 className={`flex items-center gap-2 px-4 py-2 border rounded-lg transition-all shadow-sm font-medium text-sm ${shareUrlCopied
                   ? 'bg-green-50 border-green-300 text-green-700'
-                  : 'bg-white border-slate-300 text-slate-700 hover:bg-slate-50 hover:border-slate-400'
+                  : 'bg-blue-50 border-blue-300 text-blue-700 hover:bg-blue-100 hover:border-blue-400'
                   }`}
+                title="Copier l'URL avec toutes vos données"
               >
                 {shareUrlCopied ? (
                   <>
                     <Check className="w-4 h-4" />
-                    Copied!
+                    URL copiée !
                   </>
                 ) : (
                   <>
                     <Share2 className="w-4 h-4" />
-                    Share
+                    Partager
                   </>
                 )}
               </button>
-              {lastSaveTime && (
+              {shareUrlCopied && (
+                <p className="text-xs text-green-600 font-medium">
+                  Toutes vos données sont sauvegardées dans l'URL
+                </p>
+              )}
+              {!shareUrlCopied && lastSaveTime && (
                 <p className="text-xs text-slate-400">
-                  Auto-saved {new Date(lastSaveTime).toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit', second: '2-digit' })}
+                  Sauvegarde locale : {new Date(lastSaveTime).toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit', second: '2-digit' })}
                 </p>
               )}
             </div>
