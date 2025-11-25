@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import type { CapTable, LiquidationPreference, CarveOutBeneficiary } from './engine/types';
 import { calculateCapTableState } from './engine/CapTableEngine';
-import { LayoutDashboard, PieChart, TrendingUp, Download, Undo2, Redo2 } from 'lucide-react';
+import { LayoutDashboard, PieChart, TrendingUp, Download, Undo2, Redo2, Share2, Check } from 'lucide-react';
 import { CapTableView } from './components/captable/CapTableView';
 import { FounderSetup } from './components/captable/FounderSetup';
 import { WaterfallView } from './components/waterfall/WaterfallView';
@@ -9,6 +9,7 @@ import { ConfirmationModal } from './components/ui/ConfirmationModal';
 import { LocaleSelector } from './components/ui/LocaleSelector';
 import { exportToExcel } from './engine/ExcelExport';
 import { setLocaleConfig, type Locale } from './utils';
+import { useCapTablePersistence } from './hooks/useCapTablePersistence';
 
 // App state for undo/redo history
 interface AppState {
@@ -129,6 +130,25 @@ function App() {
   const { postMoneyValuation } = calculateCapTableState(capTable);
 
   const [isResetModalOpen, setIsResetModalOpen] = useState(false);
+  const [shareUrlCopied, setShareUrlCopied] = useState(false);
+
+  // Persistence hook
+  const { copyShareUrl } = useCapTablePersistence(
+    {
+      capTable,
+      preferences,
+      carveOutPercent,
+      carveOutBeneficiary,
+      exitValuation
+    },
+    (loadedState) => {
+      setCapTable(loadedState.capTable);
+      setPreferences(loadedState.preferences);
+      setCarveOutPercent(loadedState.carveOutPercent);
+      setCarveOutBeneficiary(loadedState.carveOutBeneficiary);
+      setExitValuation(loadedState.exitValuation);
+    }
+  );
 
   // Initialize locale config on mount
   useEffect(() => {
@@ -245,6 +265,16 @@ function App() {
     setHistory([]);
     setHistoryIndex(-1);
     setIsResetModalOpen(false);
+    // Clear URL hash
+    window.history.replaceState(null, '', window.location.pathname);
+  };
+
+  const handleShare = async () => {
+    const success = await copyShareUrl();
+    if (success) {
+      setShareUrlCopied(true);
+      setTimeout(() => setShareUrlCopied(false), 2000);
+    }
   };
 
   // Helper to save current state to history
@@ -433,6 +463,25 @@ function App() {
               className="text-sm text-red-600 hover:text-red-700 font-medium px-3 py-2 rounded-lg hover:bg-red-50 transition-colors"
             >
               Reset
+            </button>
+            <button
+              onClick={handleShare}
+              className={`flex items-center gap-2 px-4 py-2 border rounded-lg transition-all shadow-sm font-medium text-sm ${shareUrlCopied
+                  ? 'bg-green-50 border-green-300 text-green-700'
+                  : 'bg-white border-slate-300 text-slate-700 hover:bg-slate-50 hover:border-slate-400'
+                }`}
+            >
+              {shareUrlCopied ? (
+                <>
+                  <Check className="w-4 h-4" />
+                  Copied!
+                </>
+              ) : (
+                <>
+                  <Share2 className="w-4 h-4" />
+                  Share
+                </>
+              )}
             </button>
             <button
               onClick={handleExport}
