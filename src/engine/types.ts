@@ -73,6 +73,7 @@ export interface CapTable {
     shareholders: Shareholder[];
     rounds: Round[];
     optionGrants: OptionGrant[]; // Track option grants from the pool
+    startupName?: string; // Name of the startup/project
 }
 
 export interface CapTableSummaryItem {

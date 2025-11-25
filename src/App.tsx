@@ -106,6 +106,7 @@ const initialCapTable: CapTable = {
       ]
     }
   ],
+  startupName: '',
   optionGrants: [
     { id: 'g1', shareholderId: '6', roundId: 'r2', shares: 1000, grantDate: '2023-07-01' },
     { id: 'g2', shareholderId: '6', roundId: 'r3', shares: 500, grantDate: '2024-04-01' },
@@ -351,6 +352,20 @@ function App() {
             <h1 className="text-lg font-bold tracking-tight">CapTable.io</h1>
           </div>
         </div>
+        <div className="px-6 py-2 border-b border-slate-800">
+          <input
+            type="text"
+            placeholder="Startup name"
+            className="w-full px-2 py-1 rounded bg-slate-800 text-white placeholder-slate-400 focus:outline-none"
+            value={capTable.startupName || ''}
+            onChange={e => setCapTable(prev => ({ ...prev, startupName: e.target.value }))}
+          />
+        </div>
+        {capTable.startupName && (
+          <p className="text-xl font-semibold text-white text-center mb-2">
+            {capTable.startupName}
+          </p>
+        )}
 
         <div className="px-6 py-4 border-b border-slate-800 space-y-4">
           <div>
