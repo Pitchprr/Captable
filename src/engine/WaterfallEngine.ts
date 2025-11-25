@@ -8,7 +8,7 @@ export const calculateWaterfall = (
     config: WaterfallConfig = { carveOutPercent: 0, carveOutBeneficiary: 'everyone', payoutStructure: 'standard' }
 ): WaterfallResult => {
 
-    const { summary, totalSharesOutstanding } = calculateCapTableState(capTable);
+    const { summary } = calculateCapTableState(capTable);
     const steps: WaterfallStep[] = [];
     let stepNumber = 0;
 

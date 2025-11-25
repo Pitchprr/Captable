@@ -223,9 +223,13 @@ function App() {
     }
   }, [preferences]); // Only depend on preferences, not rounds to avoid loop
 
-  const handleExport = () => {
+  const handleExport = async () => {
     try {
-      exportToExcel(capTable, exitValuation, preferences);
+      await exportToExcel(capTable, exitValuation, preferences, {
+        carveOutPercent,
+        carveOutBeneficiary,
+        payoutStructure: 'standard' // This could be made dynamic in future
+      });
     } catch (error) {
       console.error("Export failed:", error);
       alert("Export failed! Please check the console for details.");
