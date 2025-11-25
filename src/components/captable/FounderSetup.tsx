@@ -21,6 +21,7 @@ export const FounderSetup: React.FC<FounderSetupProps> = ({ onComplete }) => {
     const [mode, setMode] = useState<'manual' | 'percentage'>('percentage');
     const [totalCapital, setTotalCapital] = useState<number>(1000);
     const [parValue, setParValue] = useState<number>(0.01);
+    const [startupName, setStartupName] = useState<string>('');
     const [founders, setFounders] = useState<FounderInput[]>([
         { id: '1', name: 'Founder 1', ownershipPercent: 60, investmentAmount: 600, shares: 60000 },
         { id: '2', name: 'Founder 2', ownershipPercent: 40, investmentAmount: 400, shares: 40000 }
@@ -162,7 +163,8 @@ export const FounderSetup: React.FC<FounderSetupProps> = ({ onComplete }) => {
         onComplete({
             shareholders,
             rounds: [initialRound],
-            optionGrants: []
+            optionGrants: [],
+            startupName
         });
     };
 
@@ -174,6 +176,15 @@ export const FounderSetup: React.FC<FounderSetupProps> = ({ onComplete }) => {
                 </div>
                 <h2 className="text-2xl font-bold text-slate-800">Setup Initial Cap Table</h2>
                 <p className="text-slate-500 mt-2">Define the founding team and initial capital distribution.</p>
+            </div>
+
+            <div className="mb-6">
+                <Input
+                    label="Startup Name"
+                    placeholder="Enter your startup name"
+                    value={startupName}
+                    onChange={(e) => setStartupName(e.target.value)}
+                />
             </div>
 
             <div className="bg-slate-50 p-4 rounded-lg mb-6 flex flex-col sm:flex-row gap-4 items-end">
