@@ -133,7 +133,7 @@ function App() {
   const [shareUrlCopied, setShareUrlCopied] = useState(false);
 
   // Persistence hook
-  const { copyShareUrl } = useCapTablePersistence(
+  const { copyShareUrl, lastSaveTime } = useCapTablePersistence(
     {
       capTable,
       preferences,
@@ -464,25 +464,32 @@ function App() {
             >
               Reset
             </button>
-            <button
-              onClick={handleShare}
-              className={`flex items-center gap-2 px-4 py-2 border rounded-lg transition-all shadow-sm font-medium text-sm ${shareUrlCopied
+            <div className="flex flex-col items-end gap-1">
+              <button
+                onClick={handleShare}
+                className={`flex items-center gap-2 px-4 py-2 border rounded-lg transition-all shadow-sm font-medium text-sm ${shareUrlCopied
                   ? 'bg-green-50 border-green-300 text-green-700'
                   : 'bg-white border-slate-300 text-slate-700 hover:bg-slate-50 hover:border-slate-400'
-                }`}
-            >
-              {shareUrlCopied ? (
-                <>
-                  <Check className="w-4 h-4" />
-                  Copied!
-                </>
-              ) : (
-                <>
-                  <Share2 className="w-4 h-4" />
-                  Share
-                </>
+                  }`}
+              >
+                {shareUrlCopied ? (
+                  <>
+                    <Check className="w-4 h-4" />
+                    Copied!
+                  </>
+                ) : (
+                  <>
+                    <Share2 className="w-4 h-4" />
+                    Share
+                  </>
+                )}
+              </button>
+              {lastSaveTime && (
+                <p className="text-xs text-slate-400">
+                  Auto-saved {new Date(lastSaveTime).toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit', second: '2-digit' })}
+                </p>
               )}
-            </button>
+            </div>
             <button
               onClick={handleExport}
               className="flex items-center gap-2 px-4 py-2 bg-white border border-slate-300 rounded-lg text-slate-700 hover:bg-slate-50 hover:border-slate-400 transition-all shadow-sm font-medium text-sm"

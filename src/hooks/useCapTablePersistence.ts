@@ -1,4 +1,4 @@
-import { useEffect, useCallback, useRef } from 'react';
+import { useEffect, useCallback, useRef, useState } from 'react';
 import LZString from 'lz-string';
 import type { CapTable, LiquidationPreference, CarveOutBeneficiary } from '../engine/types';
 
@@ -19,6 +19,7 @@ export const useCapTablePersistence = (
 ) => {
     const autoSaveTimerRef = useRef<number | null>(null);
     const hasLoadedFromUrlRef = useRef(false);
+    const [lastSaveTime, setLastSaveTime] = useState<Date | null>(null);
 
     // Compress and encode state for URL
     const encodeStateToUrl = useCallback((state: PersistedState): string => {
@@ -49,6 +50,7 @@ export const useCapTablePersistence = (
         try {
             const json = JSON.stringify(state);
             localStorage.setItem(LOCALSTORAGE_KEY, json);
+            setLastSaveTime(new Date());
         } catch (error) {
             console.error('Failed to save to localStorage:', error);
         }
@@ -121,6 +123,12 @@ export const useCapTablePersistence = (
         // Set new timer
         autoSaveTimerRef.current = setTimeout(() => {
             saveToLocalStorage(state);
+
+            // Also update URL hash if we're already on a shared URL
+            if (window.location.hash.startsWith('#data=')) {
+                const encoded = encodeStateToUrl(state);
+                window.history.replaceState(null, '', `#data=${encoded}`);
+            }
         }, AUTOSAVE_DELAY);
 
         // Cleanup
@@ -129,11 +137,12 @@ export const useCapTablePersistence = (
                 clearTimeout(autoSaveTimerRef.current);
             }
         };
-    }, [state, saveToLocalStorage]);
+    }, [state, saveToLocalStorage, encodeStateToUrl]);
 
     return {
         generateShareUrl,
         copyShareUrl,
         saveToLocalStorage: () => saveToLocalStorage(state),
+        lastSaveTime,
     };
 };
