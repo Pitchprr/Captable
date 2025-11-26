@@ -471,44 +471,7 @@ export const WaterfallView: React.FC<WaterfallViewProps> = ({
                                                             </button>
                                                         </div>
 
-                                                        {/* Calculation tooltip */}
-                                                        {expandedStep.details?.calculation && (
-                                                            <div className="mb-4 flex items-center gap-2">
-                                                                <div className="relative group inline-block">
-                                                                    <Info className="w-4 h-4 text-blue-600 cursor-help" />
-                                                                    {/* Tooltip */}
-                                                                    <div className="invisible group-hover:visible absolute left-0 top-6 z-50 w-80 bg-slate-800 text-white text-xs rounded-lg shadow-lg p-3 pointer-events-none">
-                                                                        <div className="space-y-1">
-                                                                            <div className="flex justify-between">
-                                                                                <span className="text-slate-300">Valuation:</span>
-                                                                                <span className="font-mono">{expandedStep.details.calculation.valuation ? formatCurrency(expandedStep.details.calculation.valuation) : 'N/A'}</span>
-                                                                            </div>
-                                                                            <div className="flex justify-between">
-                                                                                <span className="text-slate-300">Price per Share:</span>
-                                                                                <span className="font-mono">{expandedStep.details.calculation.pricePerShare ? formatCurrency(expandedStep.details.calculation.pricePerShare) : 'N/A'}</span>
-                                                                            </div>
-                                                                            <div className="flex justify-between">
-                                                                                <span className="text-slate-300">Pref Multiple:</span>
-                                                                                <span className="font-mono">{expandedStep.details.calculation.preferenceMultiple ?? 'N/A'}</span>
-                                                                            </div>
-                                                                            <div className="flex justify-between">
-                                                                                <span className="text-slate-300">Type:</span>
-                                                                                <span className="font-mono">{expandedStep.details.calculation.type ?? 'N/A'}</span>
-                                                                            </div>
-                                                                            {expandedStep.details.calculation.shareClass && (
-                                                                                <div className="flex justify-between">
-                                                                                    <span className="text-slate-300">Share Class:</span>
-                                                                                    <span className="font-mono">{expandedStep.details.calculation.shareClass}</span>
-                                                                                </div>
-                                                                            )}
-                                                                        </div>
-                                                                        {/* Arrow */}
-                                                                        <div className="absolute -top-1 left-2 w-2 h-2 bg-slate-800 transform rotate-45"></div>
-                                                                    </div>
-                                                                </div>
-                                                                <span className="text-sm text-blue-900 font-medium">Calculation Details (hover icon)</span>
-                                                            </div>
-                                                        )}
+
 
                                                         {/* Shareholder Table */}
                                                         <div>
@@ -549,6 +512,38 @@ export const WaterfallView: React.FC<WaterfallViewProps> = ({
                                                                 </table>
                                                             </div>
                                                         </div>
+                                                        {/* Calculation Details Section */}
+                                                        {expandedStep.details?.calculation && (
+                                                            <div className="mt-4 p-4 bg-gray-50 border border-gray-200 rounded-lg">
+                                                                <h4 className="text-lg font-semibold text-slate-800 mb-2">Calculation Details</h4>
+                                                                <div className="grid grid-cols-2 gap-2">
+                                                                    <div className="font-medium text-slate-600">Valuation:</div>
+                                                                    <div className="font-mono text-slate-900">
+                                                                        {expandedStep.details.calculation.valuation ? formatCurrency(expandedStep.details.calculation.valuation) : 'N/A'}
+                                                                    </div>
+                                                                    <div className="font-medium text-slate-600">Price per Share:</div>
+                                                                    <div className="font-mono text-slate-900">
+                                                                        {expandedStep.details.calculation.pricePerShare ? formatCurrency(expandedStep.details.calculation.pricePerShare) : 'N/A'}
+                                                                    </div>
+                                                                    <div className="font-medium text-slate-600">Pref Multiple:</div>
+                                                                    <div className="font-mono text-slate-900">
+                                                                        {expandedStep.details.calculation.preferenceMultiple ?? 'N/A'}
+                                                                    </div>
+                                                                    <div className="font-medium text-slate-600">Type:</div>
+                                                                    <div className="font-mono text-slate-900">
+                                                                        {expandedStep.details.calculation.type ?? 'N/A'}
+                                                                    </div>
+                                                                    {expandedStep.details.calculation.shareClass && (
+                                                                        <>
+                                                                            <div className="font-medium text-slate-600">Share Class:</div>
+                                                                            <div className="font-mono text-slate-900">
+                                                                                {expandedStep.details.calculation.shareClass}
+                                                                            </div>
+                                                                        </>
+                                                                    )}
+                                                                </div>
+                                                            </div>
+                                                        )}
                                                     </div>
                                                 )}
                                             </React.Fragment>

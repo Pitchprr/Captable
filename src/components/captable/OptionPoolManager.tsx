@@ -18,6 +18,8 @@ export const OptionPoolManager: React.FC<OptionPoolManagerProps> = ({ capTable, 
     const [newGrantName, setNewGrantName] = useState('');
     const [newGrantRole, setNewGrantRole] = useState<'Employee' | 'Advisor'>('Employee');
     const [newGrantShares, setNewGrantShares] = useState<number>(0);
+    // New state: selected shareholder for the grant
+    const [newGrantShareholderId, setNewGrantShareholderId] = useState<string>(capTable.shareholders[0]?.id || '');
     const [addingToRound, setAddingToRound] = useState<string | null>(null);
 
     // Calculate pool statistics for each round
@@ -48,7 +50,8 @@ export const OptionPoolManager: React.FC<OptionPoolManagerProps> = ({ capTable, 
 
         const newGrant: OptionGrant = {
             id: Math.random().toString(36).substr(2, 9),
-            shareholderId: capTable.shareholders[0]?.id || 'pending', // Fallback if no shareholders
+            // Use the selected shareholder; if none selected, fallback to first shareholder or a placeholder
+            shareholderId: newGrantShareholderId || capTable.shareholders[0]?.id || 'pending',
             roundId,
             name: newGrantName,
             role: newGrantRole,
@@ -227,80 +230,17 @@ export const OptionPoolManager: React.FC<OptionPoolManagerProps> = ({ capTable, 
                                                             <Trash2 className="w-4 h-4" />
                                                         </button>
                                                     </div>
-                                                ))}
-                                            </div>
-                                        )}
-
-                                        {/* Add Grant Form */}
-                                        {addingToRound === round.id && (
-                                            <div className="bg-purple-50 rounded-lg p-3 border border-purple-100 animate-in fade-in slide-in-from-top-2">
-                                                <div className="grid grid-cols-12 gap-3 items-end">
-                                                    <div className="col-span-5">
-                                                        <label className="text-xs font-medium text-purple-800 mb-1 block">Name</label>
-                                                        <Input
-                                                            value={newGrantName}
-                                                            onChange={(e) => setNewGrantName(e.target.value)}
-                                                            placeholder="Employee Name"
-                                                            className="bg-white"
-                                                            autoFocus
-                                                        />
-                                                    </div>
-                                                    <div className="col-span-3">
-                                                        <label className="text-xs font-medium text-purple-800 mb-1 block">Role</label>
-                                                        <select
-                                                            value={newGrantRole}
-                                                            onChange={(e) => setNewGrantRole(e.target.value as any)}
-                                                            className="w-full h-10 rounded-md border border-slate-300 bg-white px-3 text-sm focus:outline-none focus:ring-2 focus:ring-purple-500"
-                                                        >
-                                                            <option value="Employee">Employee</option>
-                                                            <option value="Advisor">Advisor</option>
-                                                        </select>
-                                                    </div>
-                                                    <div className="col-span-2">
-                                                        <label className="text-xs font-medium text-purple-800 mb-1 block">Shares</label>
-                                                        <Input
-                                                            type="number"
-                                                            value={newGrantShares || ''}
-                                                            onChange={(e) => setNewGrantShares(parseInt(e.target.value) || 0)}
-                                                            placeholder="0"
-                                                            className="bg-white"
-                                                        />
-                                                    </div>
-                                                    <div className="col-span-2 flex gap-1">
-                                                        <Button
-                                                            onClick={() => handleAddGrant(round.id)}
-                                                            className="flex-1 bg-purple-600 hover:bg-purple-700 text-white"
-                                                            size="sm"
-                                                        >
-                                                            Add
-                                                        </Button>
-                                                        <Button
-                                                            onClick={() => setAddingToRound(null)}
-                                                            variant="ghost"
-                                                            size="sm"
-                                                            className="px-2"
-                                                        >
-                                                            <X className="w-4 h-4" />
-                                                        </Button>
-                                                    </div>
-                                                </div>
-                                            </div>
+                    {
+                                                        capTable.rounds.every(r => getPoolStats(r.id).total === 0) && (
+                                                            <div className="text-center py-12 text-slate-400">
+                                                                <Award className="w-12 h-12 mx-auto mb-3 opacity-50" />
+                                                                <p>No option pool created yet</p>
+                                                                <p className="text-sm mt-1">Add an option pool in your funding rounds first</p>
+                                                            </div>
+                                                        )
+                                                    }
+                </div>
                                         )}
                                     </div>
-                                )}
-                            </div>
-                        );
-                    })}
-
-                    {capTable.rounds.every(r => getPoolStats(r.id).total === 0) && (
-                        <div className="text-center py-12 text-slate-400">
-                            <Award className="w-12 h-12 mx-auto mb-3 opacity-50" />
-                            <p>No option pool created yet</p>
-                            <p className="text-sm mt-1">Add an option pool in your funding rounds first</p>
-                        </div>
-                    )}
-                </div>
-            )}
-        </div>
-    );
+                                );
 };
