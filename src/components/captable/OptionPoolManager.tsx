@@ -235,37 +235,40 @@ export const OptionPoolManager: React.FC<OptionPoolManagerProps> = ({ capTable, 
                                     <div className="p-6">
                                         {grants.length > 0 && (
                                             <div className="space-y-3 mb-4">
-                                                {grants.map((grant) => (
-                                                    <div key={grant.id} className="flex items-center gap-3 p-3 bg-slate-50 rounded-lg border border-slate-100">
-                                                        <div className="flex-1">
-                                                            <div className="font-medium text-slate-900">{grant.name}</div>
-                                                            <div className="text-xs text-slate-500">{grant.role}</div>
+                                                {grants.map((grant) => {
+                                                    const shareholder = capTable.shareholders.find(s => s.id === grant.shareholderId);
+                                                    return (
+                                                        <div key={grant.id} className="flex items-center gap-3 p-3 bg-slate-50 rounded-lg border border-slate-100">
+                                                            <div className="flex-1">
+                                                                <div className="font-medium text-slate-900">{shareholder?.name || grant.name || 'Unknown'}</div>
+                                                                <div className="text-xs text-slate-500">{shareholder?.role || grant.role || 'Unknown'}</div>
+                                                            </div>
+                                                            <div className="w-32">
+                                                                <input
+                                                                    type="number"
+                                                                    placeholder="Shares"
+                                                                    value={grant.shares || ''}
+                                                                    onChange={(e) => updateGrant(grant.id, { shares: Number(e.target.value) || 0 })}
+                                                                    className="w-full px-3 py-2 text-sm border border-slate-200 rounded focus:ring-2 focus:ring-blue-500 outline-none"
+                                                                />
+                                                            </div>
+                                                            <div className="w-32">
+                                                                <input
+                                                                    type="date"
+                                                                    value={grant.grantDate}
+                                                                    onChange={(e) => updateGrant(grant.id, { grantDate: e.target.value })}
+                                                                    className="w-full px-3 py-2 text-sm border border-slate-200 rounded focus:ring-2 focus:ring-blue-500 outline-none"
+                                                                />
+                                                            </div>
+                                                            <button
+                                                                onClick={() => deleteGrant(grant.id)}
+                                                                className="p-2 text-slate-400 hover:text-red-500 hover:bg-red-50 rounded transition-colors"
+                                                            >
+                                                                <Trash2 className="w-4 h-4" />
+                                                            </button>
                                                         </div>
-                                                        <div className="w-32">
-                                                            <input
-                                                                type="number"
-                                                                placeholder="Shares"
-                                                                value={grant.shares || ''}
-                                                                onChange={(e) => updateGrant(grant.id, { shares: Number(e.target.value) || 0 })}
-                                                                className="w-full px-3 py-2 text-sm border border-slate-200 rounded focus:ring-2 focus:ring-blue-500 outline-none"
-                                                            />
-                                                        </div>
-                                                        <div className="w-32">
-                                                            <input
-                                                                type="date"
-                                                                value={grant.grantDate}
-                                                                onChange={(e) => updateGrant(grant.id, { grantDate: e.target.value })}
-                                                                className="w-full px-3 py-2 text-sm border border-slate-200 rounded focus:ring-2 focus:ring-blue-500 outline-none"
-                                                            />
-                                                        </div>
-                                                        <button
-                                                            onClick={() => deleteGrant(grant.id)}
-                                                            className="p-2 text-slate-400 hover:text-red-500 hover:bg-red-50 rounded transition-colors"
-                                                        >
-                                                            <Trash2 className="w-4 h-4" />
-                                                        </button>
-                                                    </div>
-                                                ))}
+                                                    );
+                                                })}
                                             </div>
                                         )}
 

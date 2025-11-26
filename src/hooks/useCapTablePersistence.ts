@@ -11,13 +11,11 @@ interface PersistedState {
 }
 
 const LOCALSTORAGE_KEY = 'captable-autosave';
-const AUTOSAVE_DELAY = 3000; // 3 seconds
 
 export const useCapTablePersistence = (
     state: PersistedState,
     onStateLoad: (state: PersistedState | null) => void
 ) => {
-    const autoSaveTimerRef = useRef<number | null>(null);
     const hasLoadedFromUrlRef = useRef(false);
     const [lastSaveTime, setLastSaveTime] = useState<Date | null>(null);
 
@@ -56,18 +54,6 @@ export const useCapTablePersistence = (
         }
     }, []);
 
-    // Load from localStorage
-    const loadFromLocalStorage = useCallback((): PersistedState | null => {
-        try {
-            const json = localStorage.getItem(LOCALSTORAGE_KEY);
-            if (!json) return null;
-            return JSON.parse(json);
-        } catch (error) {
-            console.error('Failed to load from localStorage:', error);
-            return null;
-        }
-    }, []);
-
     // Generate shareable URL and update browser URL
     const generateAndUpdateShareUrl = useCallback((): string => {
         const encoded = encodeStateToUrl(state);
@@ -92,7 +78,7 @@ export const useCapTablePersistence = (
         }
     }, [generateAndUpdateShareUrl]);
 
-    // Load state on mount (from URL or localStorage)
+    // Load state on mount (from URL only)
     useEffect(() => {
         if (hasLoadedFromUrlRef.current) return;
         hasLoadedFromUrlRef.current = true;
@@ -110,40 +96,22 @@ export const useCapTablePersistence = (
             }
         }
 
-        // Fallback to localStorage if no URL data
-        if (!loadedState) {
-            loadedState = loadFromLocalStorage();
-            if (loadedState) {
-                console.log('Loaded state from localStorage');
-            }
-        }
+        // Only load from localStorage if explicitly requested (restored via button) or if we decide to keep it manual.
+        // User requested NO auto-load from localStorage on "classic URL".
+        // So we do NOTHING if no URL hash.
 
         // Always call onStateLoad to signal loading completion
         onStateLoad(loadedState);
-    }, [decodeStateFromUrl, loadFromLocalStorage, onStateLoad]);
+    }, [decodeStateFromUrl, onStateLoad]);
 
-    // Auto-save to localStorage only (not URL)
-    useEffect(() => {
-        // Clear existing timer
-        if (autoSaveTimerRef.current) {
-            clearTimeout(autoSaveTimerRef.current);
-        }
-
-        // Set new timer
-        autoSaveTimerRef.current = setTimeout(() => {
-            saveToLocalStorage(state);
-        }, AUTOSAVE_DELAY);
-
-        // Cleanup
-        return () => {
-            if (autoSaveTimerRef.current) {
-                clearTimeout(autoSaveTimerRef.current);
-            }
-        };
+    // Manual save function
+    const save = useCallback(() => {
+        saveToLocalStorage(state);
     }, [state, saveToLocalStorage]);
 
     return {
         copyShareUrl,
+        save,
         lastSaveTime,
     };
 };
