@@ -133,13 +133,7 @@ export const calculateWaterfall = (
             isTotal: true
         });
 
-        steps.push({
-            stepNumber,
-            stepName: '1/ Carve-Out',
-            description: 'Balance',
-            amount: remainingProceeds,
-            remainingBalance: remainingProceeds
-        });
+
     }
 
     // STEP 2+: Liquidation Preferences (by seniority)
@@ -266,13 +260,7 @@ export const calculateWaterfall = (
 
             remainingProceeds -= paidAmount;
 
-            steps.push({
-                stepNumber,
-                stepName: `${stepNumber}/ Liqu Pref (Pari Passu)`,
-                description: 'Balance',
-                amount: remainingProceeds,
-                remainingBalance: remainingProceeds
-            });
+
         }
     } else {
         // STANDARD MODE: Sequential payment by seniority
@@ -351,13 +339,7 @@ export const calculateWaterfall = (
 
             remainingProceeds -= paidAmount;
 
-            steps.push({
-                stepNumber,
-                stepName: `${stepNumber}/ Liqu Pref ${round.shareClass}`,
-                description: 'Balance',
-                amount: remainingProceeds,
-                remainingBalance: remainingProceeds
-            });
+
 
             if (remainingProceeds <= 0) break;
         }
@@ -422,8 +404,11 @@ export const calculateWaterfall = (
             return a.localeCompare(b);
         }).reverse();
 
+        let runningBalance = remainingProceeds;
+
         orderedClasses.forEach(className => {
             const amount = distributionByClass.get(className) || 0;
+            runningBalance -= amount;
 
             // Collect shareholders for this class
             const classShareholders: { id: string, name: string, amount: number }[] = [];
@@ -451,7 +436,7 @@ export const calculateWaterfall = (
                 description: `${className} Shares`,
                 shareClass: className,
                 amount: amount,
-                remainingBalance: 0,
+                remainingBalance: Math.max(0, runningBalance),
                 details: {
                     shareholders: classShareholders,
                     calculation: {

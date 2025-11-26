@@ -441,7 +441,7 @@ export const WaterfallView: React.FC<WaterfallViewProps> = ({
                                                                 </div>
                                                                 {!isTotal && (
                                                                     <div className="hidden sm:flex flex-col items-end border-l pl-3 border-slate-100">
-                                                                        <span className="text-[9px] text-slate-400 uppercase tracking-wider">Remaining</span>
+                                                                        <span className="text-[9px] text-slate-400 uppercase tracking-wider">Remaining Proceeds</span>
                                                                         <span className="font-mono text-[10px] font-medium text-slate-500">
                                                                             {formatCurrency(step.remainingBalance)}
                                                                         </span>
