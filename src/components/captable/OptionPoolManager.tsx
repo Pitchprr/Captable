@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import type { CapTable, OptionGrant, Round } from '../../engine/types';
+import type { CapTable, OptionGrant, Round, Shareholder } from '../../engine/types';
 import { Button } from '../ui/Button';
 import { Input } from '../ui/Input';
 import { Plus, Trash2, Award, X, PieChart } from 'lucide-react';
@@ -9,16 +9,17 @@ interface OptionPoolManagerProps {
     capTable: CapTable;
     onUpdate: (optionGrants: OptionGrant[]) => void;
     onUpdateRounds: (rounds: Round[]) => void;
+    onUpdateShareholders: (shareholders: Shareholder[]) => void;
+    onCapTableUpdate: React.Dispatch<React.SetStateAction<CapTable>>;
     isCollapsed?: boolean;
     onToggleCollapse?: () => void;
 }
 
-export const OptionPoolManager: React.FC<OptionPoolManagerProps> = ({ capTable, onUpdate, onUpdateRounds, isCollapsed, onToggleCollapse }) => {
+export const OptionPoolManager: React.FC<OptionPoolManagerProps> = ({ capTable, onUpdate, onUpdateRounds, onUpdateShareholders, onCapTableUpdate, isCollapsed, onToggleCollapse }) => {
     const [expandedRound, setExpandedRound] = useState<string | null>(null);
     const [newGrantName, setNewGrantName] = useState('');
     const [newGrantRole, setNewGrantRole] = useState<'Employee' | 'Advisor'>('Employee');
     const [newGrantShares, setNewGrantShares] = useState<number>(0);
-    // New state: selected shareholder for the grant
     const [newGrantShareholderId, setNewGrantShareholderId] = useState<string>(capTable.shareholders[0]?.id || '');
     const [addingToRound, setAddingToRound] = useState<string | null>(null);
 
@@ -48,10 +49,22 @@ export const OptionPoolManager: React.FC<OptionPoolManagerProps> = ({ capTable, 
     const handleAddGrant = (roundId: string) => {
         if (!newGrantName || newGrantShares <= 0) return;
 
+        let finalShareholderId = newGrantShareholderId;
+        let newShareholder: Shareholder | null = null;
+
+        // If creating a new shareholder
+        if (newGrantShareholderId === 'NEW_SHAREHOLDER') {
+            newShareholder = {
+                id: Math.random().toString(36).substr(2, 9),
+                name: newGrantName,
+                role: newGrantRole,
+            };
+            finalShareholderId = newShareholder.id;
+        }
+
         const newGrant: OptionGrant = {
             id: Math.random().toString(36).substr(2, 9),
-            // Use the selected shareholder; if none selected, fallback to first shareholder or a placeholder
-            shareholderId: newGrantShareholderId || capTable.shareholders[0]?.id || 'pending',
+            shareholderId: finalShareholderId,
             roundId,
             name: newGrantName,
             role: newGrantRole,
@@ -61,7 +74,21 @@ export const OptionPoolManager: React.FC<OptionPoolManagerProps> = ({ capTable, 
             cliffMonths: 12
         };
 
-        onUpdate([...capTable.optionGrants, newGrant]);
+        // Atomic update using onCapTableUpdate
+        if (onCapTableUpdate) {
+            onCapTableUpdate(prev => ({
+                ...prev,
+                shareholders: newShareholder ? [...prev.shareholders, newShareholder] : prev.shareholders,
+                optionGrants: [...prev.optionGrants, newGrant]
+            }));
+        } else {
+            // Fallback for backward compatibility if onCapTableUpdate is not passed (though it should be)
+            if (newShareholder) {
+                onUpdateShareholders([...capTable.shareholders, newShareholder]);
+            }
+            onUpdate([...capTable.optionGrants, newGrant]);
+        }
+
         setNewGrantName('');
         setNewGrantShares(0);
         setAddingToRound(null);
@@ -97,7 +124,7 @@ export const OptionPoolManager: React.FC<OptionPoolManagerProps> = ({ capTable, 
                 </div>
 
                 {/* Summary Card */}
-                <div className="bg-gradient-to-br from-blue-50 to-purple-50 rounded-lg border border-blue-200 p-4 min-w-[280px] flex items-center gap-4">
+                <div className="bg-gradient-to-br from-blue-50 to-purple-50 rounded-lg border border-blue-200 p-4 min-w-[280px] flex items-center gap-4 cursor-pointer hover:bg-blue-50/80 transition-colors" onClick={onToggleCollapse}>
                     <div>
                         <div className="flex items-center gap-2 mb-2">
                             <Award className="w-4 h-4 text-blue-600" />
@@ -125,13 +152,17 @@ export const OptionPoolManager: React.FC<OptionPoolManagerProps> = ({ capTable, 
                         </div>
                     </div>
                     {onToggleCollapse && (
-                        <button
-                            onClick={onToggleCollapse}
-                            className="ml-auto p-2 text-slate-400 hover:text-blue-600 transition-colors"
-                            title={isCollapsed ? "Expand" : "Collapse"}
-                        >
-                            {isCollapsed ? <Plus className="w-5 h-5" /> : <X className="w-5 h-5 rotate-45" />}
-                        </button>
+                        <div className="ml-auto flex flex-col items-center gap-1">
+                            <button
+                                className="p-2 text-slate-400 hover:text-blue-600 transition-colors bg-white/50 rounded-full"
+                                title={isCollapsed ? "Expand" : "Collapse"}
+                            >
+                                {isCollapsed ? <Plus className="w-5 h-5" /> : <X className="w-5 h-5" />}
+                            </button>
+                            <span className="text-[10px] font-medium text-slate-500 uppercase tracking-wider">
+                                {isCollapsed ? 'Manage' : 'Close'}
+                            </span>
+                        </div>
                     )}
                 </div>
             </div>
@@ -144,7 +175,11 @@ export const OptionPoolManager: React.FC<OptionPoolManagerProps> = ({ capTable, 
                         const grants = capTable.optionGrants.filter(g => g.roundId === round.id);
                         const isExpanded = expandedRound === round.id;
 
-                        if (stats.total === 0) return null; // Don't show rounds with no pool
+                        const hasPoolConfig = (round.poolMode === 'percent' && (round.poolPercent || 0) > 0) ||
+                            (round.poolMode === 'shares' && (round.poolSize || 0) > 0) ||
+                            (round.calculatedPoolShares || 0) > 0;
+
+                        if (!hasPoolConfig && stats.granted === 0) return null; // Don't show rounds with no pool config AND no grants
 
                         return (
                             <div key={round.id} className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
@@ -230,17 +265,104 @@ export const OptionPoolManager: React.FC<OptionPoolManagerProps> = ({ capTable, 
                                                             <Trash2 className="w-4 h-4" />
                                                         </button>
                                                     </div>
-                    {
-                                                        capTable.rounds.every(r => getPoolStats(r.id).total === 0) && (
-                                                            <div className="text-center py-12 text-slate-400">
-                                                                <Award className="w-12 h-12 mx-auto mb-3 opacity-50" />
-                                                                <p>No option pool created yet</p>
-                                                                <p className="text-sm mt-1">Add an option pool in your funding rounds first</p>
-                                                            </div>
-                                                        )
-                                                    }
-                </div>
+                                                ))}
+                                            </div>
+                                        )}
+
+                                        {/* Add Grant Form */}
+                                        {addingToRound === round.id && (
+                                            <div className="bg-purple-50 rounded-lg p-3 border border-purple-100 animate-in fade-in slide-in-from-top-2">
+                                                <div className="grid grid-cols-12 gap-3 items-end">
+                                                    <div className="col-span-4">
+                                                        <label className="text-xs font-medium text-purple-800 mb-1 block">Shareholder</label>
+                                                        <select
+                                                            value={newGrantShareholderId}
+                                                            onChange={(e) => {
+                                                                const val = e.target.value;
+                                                                setNewGrantShareholderId(val);
+                                                                if (val !== 'NEW_SHAREHOLDER') {
+                                                                    const sh = capTable.shareholders.find(s => s.id === val);
+                                                                    if (sh) {
+                                                                        setNewGrantName(sh.name);
+                                                                        // Cast role to match OptionGrant role type if compatible, else default
+                                                                        if (sh.role === 'Employee' || sh.role === 'Advisor') {
+                                                                            setNewGrantRole(sh.role);
+                                                                        }
+                                                                    }
+                                                                } else {
+                                                                    setNewGrantName('');
+                                                                }
+                                                            }}
+                                                            className="w-full h-10 rounded-md border border-slate-300 bg-white px-3 text-sm focus:outline-none focus:ring-2 focus:ring-purple-500"
+                                                        >
+                                                            <option value="NEW_SHAREHOLDER" className="font-bold text-purple-600">+ Create New Shareholder</option>
+                                                            <optgroup label="Existing Shareholders">
+                                                                {capTable.shareholders.map((sh) => (
+                                                                    <option key={sh.id} value={sh.id}>
+                                                                        {sh.name} ({sh.role})
+                                                                    </option>
+                                                                ))}
+                                                            </optgroup>
+                                                        </select>
+                                                    </div>
+                                                    <div className="col-span-3">
+                                                        <label className="text-xs font-medium text-purple-800 mb-1 block">Name</label>
+                                                        <Input
+                                                            value={newGrantName}
+                                                            onChange={(e) => setNewGrantName(e.target.value)}
+                                                            placeholder="Employee Name"
+                                                            className="bg-white"
+                                                            autoFocus={newGrantShareholderId === 'NEW_SHAREHOLDER'}
+                                                        />
+                                                    </div>
+                                                    <div className="col-span-2">
+                                                        <label className="text-xs font-medium text-purple-800 mb-1 block">Role</label>
+                                                        <select
+                                                            value={newGrantRole}
+                                                            onChange={(e) => setNewGrantRole(e.target.value as any)}
+                                                            className="w-full h-10 rounded-md border border-slate-300 bg-white px-3 text-sm focus:outline-none focus:ring-2 focus:ring-purple-500"
+                                                        >
+                                                            <option value="Employee">Employee</option>
+                                                            <option value="Advisor">Advisor</option>
+                                                        </select>
+                                                    </div>
+                                                    <div className="col-span-2">
+                                                        <label className="text-xs font-medium text-purple-800 mb-1 block">Shares</label>
+                                                        <Input
+                                                            type="number"
+                                                            value={newGrantShares || ''}
+                                                            onChange={(e) => setNewGrantShares(parseInt(e.target.value) || 0)}
+                                                            placeholder="0"
+                                                            className="bg-white"
+                                                        />
+                                                    </div>
+                                                    <div className="col-span-1 flex gap-1">
+                                                        <Button
+                                                            onClick={() => handleAddGrant(round.id)}
+                                                            className="flex-1 bg-purple-600 hover:bg-purple-700 text-white"
+                                                            size="sm"
+                                                        >
+                                                            <Plus className="w-4 h-4" />
+                                                        </Button>
+                                                    </div>
+                                                </div>
+                                            </div>
                                         )}
                                     </div>
-                                );
+                                )}
+                            </div>
+                        );
+                    })}
+
+                    {capTable.rounds.every(r => getPoolStats(r.id).total === 0) && (
+                        <div className="text-center py-12 text-slate-400">
+                            <Award className="w-12 h-12 mx-auto mb-3 opacity-50" />
+                            <p>No option pool created yet</p>
+                            <p className="text-sm mt-1">Add an option pool in your funding rounds first</p>
+                        </div>
+                    )}
+                </div>
+            )}
+        </div>
+    );
 };

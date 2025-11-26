@@ -99,6 +99,8 @@ export const CapTableView: React.FC<CapTableViewProps> = ({ capTable, setCapTabl
                 capTable={capTable}
                 onUpdate={updateOptionGrants}
                 onUpdateRounds={updateRounds}
+                onUpdateShareholders={updateShareholders}
+                onCapTableUpdate={setCapTable}
                 isCollapsed={isOptionPoolsCollapsed}
                 onToggleCollapse={() => setIsOptionPoolsCollapsed(!isOptionPoolsCollapsed)}
             />
