@@ -260,7 +260,8 @@ export const calculateWaterfall = (
                             shareClass: className,
                             valuation: representativeRound?.preMoneyValuation,
                             pricePerShare: representativeRound?.pricePerShare || representativeRound?.calculatedPricePerShare,
-                            preferenceMultiple: pref?.multiple
+                            preferenceMultiple: pref?.multiple,
+                            investedAmount: allClaims.reduce((sum, c) => c.shareClass === className ? sum + (c.claim / (pref?.multiple || 1)) : sum, 0)
                         }
                     }
                 });
@@ -339,7 +340,8 @@ export const calculateWaterfall = (
                         shareClass: round.shareClass,
                         valuation: round.preMoneyValuation,
                         pricePerShare: round.pricePerShare || round.calculatedPricePerShare,
-                        preferenceMultiple: pref.multiple
+                        preferenceMultiple: pref.multiple,
+                        investedAmount: round.investments.reduce((sum, inv) => sum + inv.amount, 0)
                     }
                 }
             });

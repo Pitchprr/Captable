@@ -541,6 +541,18 @@ export const WaterfallView: React.FC<WaterfallViewProps> = ({
                                                                             </div>
                                                                         </>
                                                                     )}
+                                                                    {expandedStep.details.calculation.investedAmount !== undefined && (
+                                                                        <>
+                                                                            <div className="font-medium text-slate-600">Total Invested:</div>
+                                                                            <div className="font-mono text-slate-900">
+                                                                                {formatCurrency(expandedStep.details.calculation.investedAmount)}
+                                                                            </div>
+                                                                            <div className="font-medium text-slate-600">Calculation:</div>
+                                                                            <div className="font-mono text-slate-900 text-xs">
+                                                                                {formatCurrency(expandedStep.details.calculation.investedAmount)} × {expandedStep.details.calculation.preferenceMultiple}x = {formatCurrency(expandedStep.amount)}
+                                                                            </div>
+                                                                        </>
+                                                                    )}
                                                                 </div>
                                                             </div>
                                                         )}

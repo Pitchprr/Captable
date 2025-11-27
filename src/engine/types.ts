@@ -148,6 +148,7 @@ export interface WaterfallStep {
             totalShares?: number;
             type?: 'Preference' | 'CarveOut' | 'Participation';
             shareClass?: string;
+            investedAmount?: number;
         };
     };
 }
