@@ -27,14 +27,57 @@ export const calculateWaterfall = (
         });
     });
 
-    // Identify Non-Participating share classes
+    // Calculate Total Fully Diluted Shares (for conversion checks)
+    let totalFullyDilutedShares = 0;
+    summary.forEach(s => {
+        totalFullyDilutedShares += s.totalShares + s.totalOptions;
+    });
+
+    // Identify Non-Participating share classes and handle Conversion Logic
     const nonParticipatingClasses = new Set<string>();
+    const effectivePreferences: LiquidationPreference[] = [];
+    const convertedClasses = new Set<string>();
+
     preferences.forEach(pref => {
         if (pref.type === 'Non-Participating') {
             const round = capTable.rounds.find(r => r.id === pref.roundId);
             if (round) {
-                nonParticipatingClasses.add(round.shareClass);
+                // 1. Calculate Preference Value (Option A)
+                let prefClaim = 0;
+                round.investments.forEach(inv => {
+                    prefClaim += inv.amount * pref.multiple;
+                });
+
+                // 2. Calculate Conversion Value (Option B)
+                // What % of the company do they own?
+                let classShares = 0;
+                summary.forEach(s => {
+                    classShares += s.sharesByClass[round.shareClass] || 0;
+                });
+
+                const ownershipPct = totalFullyDilutedShares > 0 ? classShares / totalFullyDilutedShares : 0;
+
+                let effectiveExit = exitValuation;
+                if (config.carveOutPercent > 0) {
+                    effectiveExit -= exitValuation * (config.carveOutPercent / 100);
+                }
+
+                const conversionValue = effectiveExit * ownershipPct;
+
+                if (conversionValue > prefClaim) {
+                    // OPTION B: Convert to Ordinary
+                    convertedClasses.add(round.shareClass);
+                    // Do NOT add to nonParticipatingClasses (so they are included in catch-up)
+                    // Do NOT add to effectivePreferences (so they don't get a pref step)
+                } else {
+                    // OPTION A: Keep Preference
+                    nonParticipatingClasses.add(round.shareClass);
+                    effectivePreferences.push(pref);
+                }
             }
+        } else {
+            // Participating preferences always keep their preference structure
+            effectivePreferences.push(pref);
         }
     });
 
@@ -146,7 +189,8 @@ export const calculateWaterfall = (
     }
 
     // STEP 2+: Liquidation Preferences
-    const sortedPrefs = [...preferences].sort((a, b) => a.seniority - b.seniority);
+    // Use effectivePreferences (which excludes converted classes)
+    const sortedPrefs = [...effectivePreferences].sort((a, b) => a.seniority - b.seniority);
     const participatedClasses = new Set<string>();
 
     if (config.payoutStructure === 'pari-passu') {
