@@ -53,13 +53,12 @@ export const calculateWaterfall = (
 
     let remainingProceeds = exitValuation;
 
-    // STEP 1: Carve-Out - Distribute based on beneficiary selection
+    // STEP 1: Carve-Out
     if (config.carveOutPercent > 0) {
         stepNumber++;
         const carveOutAmount = exitValuation * (config.carveOutPercent / 100);
         remainingProceeds -= carveOutAmount;
 
-        // Filter eligible shareholders based on beneficiary type
         let eligibleShareholders = summary;
         if (config.carveOutBeneficiary === 'founders-only') {
             eligibleShareholders = summary.filter(s => {
@@ -73,13 +72,11 @@ export const calculateWaterfall = (
             });
         }
 
-        // Calculate total eligible shares
         let totalEligibleShares = 0;
         eligibleShareholders.forEach(s => {
             totalEligibleShares += s.totalShares + s.totalOptions;
         });
 
-        // Distribute carve-out pro-rata to eligible shareholders
         if (totalEligibleShares > 0) {
             eligibleShareholders.forEach(s => {
                 const p = payouts.get(s.shareholderId);
@@ -90,24 +87,21 @@ export const calculateWaterfall = (
             });
         }
 
-        // Get all share classes for carve-out distribution (only from eligible shareholders)
+        // Add steps
         const shareClasses = new Map<string, number>();
         eligibleShareholders.forEach(s => {
             Object.entries(s.sharesByClass).forEach(([className, shares]) => {
                 shareClasses.set(className, (shareClasses.get(className) || 0) + shares);
             });
-            // Add options to Ordinary class (assuming options convert to Ordinary)
             if (s.totalOptions > 0) {
                 shareClasses.set('Ordinary', (shareClasses.get('Ordinary') || 0) + s.totalOptions);
             }
         });
 
-        // Add carve-out steps for each share class
         Array.from(shareClasses.keys()).sort().reverse().forEach(className => {
             const shares = shareClasses.get(className) || 0;
             const classAmount = totalEligibleShares > 0 ? (shares / totalEligibleShares) * carveOutAmount : 0;
 
-            // Collect shareholders for this class
             const classShareholders: { id: string, name: string, amount: number }[] = [];
             eligibleShareholders.forEach(s => {
                 const sShares = (s.sharesByClass[className] || 0) + (className === 'Ordinary' ? s.totalOptions : 0);
@@ -125,7 +119,7 @@ export const calculateWaterfall = (
 
             steps.push({
                 stepNumber,
-                stepName: '1/ Carve-Out',
+                stepName: `${stepNumber}/ Carve-Out`,
                 description: className,
                 shareClass: className,
                 amount: classAmount,
@@ -141,24 +135,21 @@ export const calculateWaterfall = (
             });
         });
 
-        // Add total carve-out
         steps.push({
             stepNumber,
-            stepName: '1/ Carve-Out',
+            stepName: `${stepNumber}/ Carve-Out`,
             description: 'Total carve-out',
             amount: carveOutAmount,
             remainingBalance: remainingProceeds,
             isTotal: true
         });
-
-
     }
 
-    // STEP 2+: Liquidation Preferences (by seniority)
+    // STEP 2+: Liquidation Preferences
     const sortedPrefs = [...preferences].sort((a, b) => a.seniority - b.seniority);
+    const participatedClasses = new Set<string>();
 
     if (config.payoutStructure === 'pari-passu') {
-        // PARI PASSU MODE: Group preferences by seniority and pay proportionally within each group
         const prefsBySeniority = new Map<number, typeof sortedPrefs>();
         sortedPrefs.forEach(pref => {
             if (!prefsBySeniority.has(pref.seniority)) {
@@ -167,7 +158,6 @@ export const calculateWaterfall = (
             prefsBySeniority.get(pref.seniority)!.push(pref);
         });
 
-        // Process each seniority level
         const seniorityLevels = Array.from(prefsBySeniority.keys()).sort((a, b) => a - b);
 
         for (const seniority of seniorityLevels) {
@@ -176,7 +166,6 @@ export const calculateWaterfall = (
             const prefsAtLevel = prefsBySeniority.get(seniority)!;
             stepNumber++;
 
-            // Calculate total claims at this seniority level
             let totalClaimsAtLevel = 0;
             const allClaims: { shareholderId: string, claim: number, shareClass: string, roundName: string }[] = [];
 
@@ -196,33 +185,26 @@ export const calculateWaterfall = (
                 });
             });
 
-            // Pay proportionally across all claims at this seniority level
             const paidAmount = Math.min(remainingProceeds, totalClaimsAtLevel);
-            const ratio = paidAmount / totalClaimsAtLevel;
+            const ratio = totalClaimsAtLevel > 0 ? paidAmount / totalClaimsAtLevel : 0;
 
-            // Distribute to shareholders
             allClaims.forEach(c => {
                 const p = payouts.get(c.shareholderId);
                 if (p) p.preferencePayout += c.claim * ratio;
             });
 
-            // Group by share class for display
             const byClass = new Map<string, number>();
             allClaims.forEach(c => {
                 byClass.set(c.shareClass, (byClass.get(c.shareClass) || 0) + (c.claim * ratio));
             });
 
-            // Add steps for each share class at this seniority
             Array.from(byClass.keys()).sort().reverse().forEach(className => {
                 const classAmount = byClass.get(className)!;
-
-                // Collect shareholders for this class
                 const classShareholders: { id: string, name: string, amount: number }[] = [];
                 allClaims.forEach(c => {
                     if (c.shareClass === className) {
                         const amount = c.claim * ratio;
                         if (amount > 0) {
-                            // Aggregate if same shareholder has multiple claims in this class (unlikely but safe)
                             const existing = classShareholders.find(s => s.id === c.shareholderId);
                             if (existing) {
                                 existing.amount += amount;
@@ -238,8 +220,6 @@ export const calculateWaterfall = (
                     }
                 });
 
-                // Find round info for this class (approximate if multiple rounds share class)
-                // In pari-passu, we might have multiple rounds. We'll pick the first one matching the class for display.
                 const representativeRound = capTable.rounds.find(r => r.shareClass === className);
                 const pref = prefsAtLevel.find(p => {
                     const r = capTable.rounds.find(rd => rd.id === p.roundId);
@@ -267,7 +247,6 @@ export const calculateWaterfall = (
                 });
             });
 
-            // Add total for this seniority level
             steps.push({
                 stepNumber,
                 stepName: `${stepNumber}/ Liqu Pref (Pari Passu)`,
@@ -278,18 +257,15 @@ export const calculateWaterfall = (
             });
 
             remainingProceeds -= paidAmount;
-
-
         }
     } else {
-        // STANDARD MODE: Sequential payment by seniority
+        // STANDARD MODE
         for (const pref of sortedPrefs) {
             const round = capTable.rounds.find(r => r.id === pref.roundId);
             if (!round || remainingProceeds <= 0) continue;
 
             stepNumber++;
 
-            // Calculate total preference claim for this round
             let roundTotalClaim = 0;
             const claims: { shareholderId: string, claim: number, shareClass: string }[] = [];
 
@@ -303,16 +279,14 @@ export const calculateWaterfall = (
                 roundTotalClaim += claim;
             });
 
-            const paidAmount = Math.min(remainingProceeds, roundTotalClaim);
-            const ratio = paidAmount / roundTotalClaim;
+            const preferencePaidAmount = Math.min(remainingProceeds, roundTotalClaim);
+            const ratio = roundTotalClaim > 0 ? preferencePaidAmount / roundTotalClaim : 0;
 
-            // Pay preferences
             claims.forEach(c => {
                 const p = payouts.get(c.shareholderId);
                 if (p) p.preferencePayout += c.claim * ratio;
             });
 
-            // Add step for this preference
             const stepShareholders: { id: string, name: string, amount: number }[] = [];
             claims.forEach(c => {
                 const amount = c.claim * ratio;
@@ -331,8 +305,8 @@ export const calculateWaterfall = (
                 stepName: `${stepNumber}/ Liqu Pref ${round.shareClass}`,
                 description: `${round.shareClass} Shares`,
                 shareClass: round.shareClass,
-                amount: paidAmount,
-                remainingBalance: remainingProceeds - paidAmount,
+                amount: preferencePaidAmount,
+                remainingBalance: remainingProceeds - preferencePaidAmount,
                 details: {
                     shareholders: stepShareholders,
                     calculation: {
@@ -346,128 +320,147 @@ export const calculateWaterfall = (
                 }
             });
 
-            if (pref.type === 'Participating') {
+            remainingProceeds -= preferencePaidAmount;
+
+            // PARTICIPATING PREFERENCES
+            if (pref.type === 'Participating' && remainingProceeds > 0) {
+                const roundSharesByHolder = new Map<string, number>();
+                summary.forEach(s => {
+                    const sharesInThisClass = s.sharesByClass[round.shareClass] || 0;
+                    if (sharesInThisClass > 0) {
+                        roundSharesByHolder.set(s.shareholderId, sharesInThisClass);
+                    }
+                });
+
+                const totalRoundShares = Array.from(roundSharesByHolder.values()).reduce((sum, shares) => sum + shares, 0);
+
+                const participationAmount = totalRoundShares > 0 && totalParticipatingShares > 0
+                    ? (totalRoundShares / totalParticipatingShares) * remainingProceeds
+                    : 0;
+
+                const participationShareholders: { id: string, name: string, amount: number }[] = [];
+                roundSharesByHolder.forEach((shares, shareholderId) => {
+                    const p = payouts.get(shareholderId);
+                    if (p && totalRoundShares > 0) {
+                        const shareholderParticipation = (shares / totalRoundShares) * participationAmount;
+                        p.participationPayout += shareholderParticipation;
+
+                        const sName = summary.find(s => s.shareholderId === shareholderId)?.shareholderName || 'Unknown';
+                        participationShareholders.push({
+                            id: shareholderId,
+                            name: sName,
+                            amount: shareholderParticipation
+                        });
+                    }
+                });
+
                 steps.push({
                     stepNumber,
                     stepName: `${stepNumber}/ Liqu Pref ${round.shareClass}`,
-                    description: `Total liq pref ${round.shareClass}`,
-                    amount: paidAmount,
-                    remainingBalance: remainingProceeds - paidAmount,
+                    description: `Pro-rata participation ${round.shareClass}`,
+                    shareClass: round.shareClass,
+                    amount: participationAmount,
+                    remainingBalance: remainingProceeds - participationAmount,
+                    details: {
+                        shareholders: participationShareholders,
+                        calculation: {
+                            type: 'Participation',
+                            shareClass: round.shareClass,
+                            totalShares: totalRoundShares
+                        }
+                    }
+                });
+
+                remainingProceeds -= participationAmount;
+                participatedClasses.add(round.shareClass);
+
+                steps.push({
+                    stepNumber,
+                    stepName: `${stepNumber}/ Liqu Pref ${round.shareClass}`,
+                    description: `Total ${round.shareClass} (Pref + Participation)`,
+                    amount: preferencePaidAmount + participationAmount,
+                    remainingBalance: remainingProceeds,
                     isTotal: true
                 });
             }
-
-            remainingProceeds -= paidAmount;
-
-
-
-            if (remainingProceeds <= 0) break;
         }
     }
 
-    // STEP N: Catch-up and Pro-rata distribution
-    if (remainingProceeds > 0 && totalParticipatingShares > 0) {
+    // STEP N: Catch-up
+    if (remainingProceeds > 0 || totalParticipatingShares > 0) {
         stepNumber++;
 
-        // Group by share class for catch-up
-        const shareClasses = new Map<string, { shares: number, shareholders: string[] }>();
+        // 1. Identify all classes
+        const allClasses = new Set<string>();
         summary.forEach(s => {
-            Object.entries(s.sharesByClass).forEach(([className, shares]) => {
-                if (!nonParticipatingClasses.has(className)) {
-                    if (!shareClasses.has(className)) {
-                        shareClasses.set(className, { shares: 0, shareholders: [] });
-                    }
-                    const classData = shareClasses.get(className)!;
-                    classData.shares += shares;
-                    if (!classData.shareholders.includes(s.shareholderId)) {
-                        classData.shareholders.push(s.shareholderId);
-                    }
-                }
-            });
-            // Add options to Ordinary class
-            if (s.totalOptions > 0) {
-                if (!shareClasses.has('Ordinary')) {
-                    shareClasses.set('Ordinary', { shares: 0, shareholders: [] });
-                }
-                const classData = shareClasses.get('Ordinary')!;
-                classData.shares += s.totalOptions;
-                if (!classData.shareholders.includes(s.shareholderId)) {
-                    classData.shareholders.push(s.shareholderId);
-                }
-            }
+            Object.keys(s.sharesByClass).forEach(c => allClasses.add(c));
+            if (s.totalOptions > 0) allClasses.add('Ordinary');
         });
+        const sortedClasses = Array.from(allClasses).sort().reverse();
 
-        // Distribute remaining proceeds pro-rata
-        const distributionByClass = new Map<string, number>();
+        // 2. Calculate eligible shares for distribution
+        let totalCatchupShares = 0;
+        const classSharesMap = new Map<string, number>();
 
-        summary.forEach(s => {
-            const p = payouts.get(s.shareholderId);
-            if (p) {
-                // Calculate eligible shares for this shareholder (excluding non-participating classes)
-                let eligibleShares = 0;
-                Object.entries(s.sharesByClass).forEach(([className, shares]) => {
-                    if (!nonParticipatingClasses.has(className)) {
-                        eligibleShares += shares;
+        sortedClasses.forEach(className => {
+            let classShares = 0;
+            // Eligible if NOT Non-Participating AND NOT already Participated
+            if (!nonParticipatingClasses.has(className) && !participatedClasses.has(className)) {
+                summary.forEach(s => {
+                    if (className === 'Ordinary') {
+                        classShares += s.totalOptions;
+                    } else {
+                        classShares += s.sharesByClass[className] || 0;
                     }
                 });
-                eligibleShares += s.totalOptions;
-
-                if (eligibleShares > 0) {
-                    const shareholderPortion = (eligibleShares / totalParticipatingShares) * remainingProceeds;
-                    p.participationPayout += shareholderPortion;
-
-                    // Track by class
-                    Object.entries(s.sharesByClass).forEach(([className, shares]) => {
-                        if (!nonParticipatingClasses.has(className)) {
-                            const classPortion = (shares / totalParticipatingShares) * remainingProceeds;
-                            distributionByClass.set(className, (distributionByClass.get(className) || 0) + classPortion);
-                        }
-                    });
-                    // Track options as Ordinary
-                    if (s.totalOptions > 0) {
-                        const optionsPortion = (s.totalOptions / totalParticipatingShares) * remainingProceeds;
-                        distributionByClass.set('Ordinary', (distributionByClass.get('Ordinary') || 0) + optionsPortion);
-                    }
-                }
             }
+            classSharesMap.set(className, classShares);
+            totalCatchupShares += classShares;
         });
 
-        // Add catch-up/pro-rata steps for each class
-        const orderedClasses = Array.from(shareClasses.keys()).sort((a, b) => {
-            if (a === 'Ordinary') return 1;
-            if (b === 'Ordinary') return -1;
-            return a.localeCompare(b);
-        }).reverse();
+        // 3. Create steps for ALL classes
+        let currentBalance = remainingProceeds;
+        const catchupProceeds = remainingProceeds;
 
-        let runningBalance = remainingProceeds;
+        sortedClasses.forEach(className => {
+            const eligibleShares = classSharesMap.get(className) || 0;
+            const amount = (totalCatchupShares > 0 && catchupProceeds > 0)
+                ? (eligibleShares / totalCatchupShares) * catchupProceeds
+                : 0;
 
-        orderedClasses.forEach(className => {
-            const amount = distributionByClass.get(className) || 0;
-            runningBalance -= amount;
-
-            // Collect shareholders for this class
             const classShareholders: { id: string, name: string, amount: number }[] = [];
-            summary.forEach(s => {
-                let sShares = 0;
-                if (!nonParticipatingClasses.has(className)) {
-                    sShares = s.sharesByClass[className] || 0;
-                }
 
-                if (className === 'Ordinary') {
-                    sShares += s.totalOptions;
-                }
-
-                if (sShares > 0) {
-                    const sAmount = (sShares / totalParticipatingShares) * remainingProceeds;
-                    if (sAmount > 0) {
-                        classShareholders.push({
-                            id: s.shareholderId,
-                            name: s.shareholderName,
-                            amount: sAmount
-                        });
+            if (amount > 0) {
+                summary.forEach(s => {
+                    let sShares = 0;
+                    if (className === 'Ordinary') {
+                        sShares = s.totalOptions;
+                    } else {
+                        sShares = s.sharesByClass[className] || 0;
                     }
-                }
-            });
+
+                    if (sShares > 0) {
+                        // Double check eligibility logic at shareholder level
+                        if (!nonParticipatingClasses.has(className) && !participatedClasses.has(className)) {
+                            const sAmount = (sShares / totalCatchupShares) * catchupProceeds;
+                            if (sAmount > 0) {
+                                classShareholders.push({
+                                    id: s.shareholderId,
+                                    name: s.shareholderName,
+                                    amount: sAmount
+                                });
+
+                                const p = payouts.get(s.shareholderId);
+                                if (p) {
+                                    p.participationPayout += sAmount;
+                                }
+                            }
+                        }
+                    }
+                });
+            }
+
+            currentBalance = Math.max(0, currentBalance - amount);
 
             steps.push({
                 stepNumber,
@@ -475,64 +468,35 @@ export const calculateWaterfall = (
                 description: `${className} Shares`,
                 shareClass: className,
                 amount: amount,
-                remainingBalance: Math.max(0, runningBalance),
+                remainingBalance: currentBalance,
                 details: {
-                    shareholders: classShareholders,
-                    calculation: {
-                        type: 'Participation',
-                        shareClass: className,
-                        totalShares: shareClasses.get(className)?.shares || 0
-                    }
+                    shareholders: classShareholders
                 }
             });
         });
 
-        // Add total catch-up
+        // Total Catch-up Step
         steps.push({
             stepNumber,
             stepName: `${stepNumber}/ Catch-up Total`,
-            description: `Total catch-up`,
-            amount: remainingProceeds,
+            description: 'Total catch-up',
+            amount: catchupProceeds,
             remainingBalance: 0,
             isTotal: true
         });
-
-        remainingProceeds = 0;
     }
 
-    // Sum up and calculate multiples
+    // Finalize Payouts
     const results: WaterfallPayout[] = [];
     payouts.forEach(p => {
-        let grossPayout = p.carveOutPayout + p.preferencePayout + p.participationPayout;
+        p.totalPayout = p.carveOutPayout + p.preferencePayout + p.participationPayout;
 
-        // Deduct Strike Price for Options
-        const shareholderSummary = summary.find(s => s.shareholderId === p.shareholderId);
-        let totalStrikeCost = 0;
-
-        if (shareholderSummary && shareholderSummary.totalOptions > 0) {
-            Object.entries(shareholderSummary.optionsByPool).forEach(([roundId, optionCount]) => {
-                const round = capTable.rounds.find(r => r.id === roundId);
-                if (round && round.strikePrice && round.strikePrice > 0) {
-                    totalStrikeCost += optionCount * round.strikePrice;
-                }
-            });
+        const s = summary.find(sum => sum.shareholderId === p.shareholderId);
+        if (s) {
+            p.totalInvested = s.totalInvested;
         }
 
-        // Net Payout (cannot be negative)
-        // Note: This is a simplified model. Strictly speaking, if options are OTM, they shouldn't participate.
-        // But for a standard waterfall view, showing the net proceeds after exercise cost is the standard approach.
-        p.totalPayout = Math.max(0, grossPayout - totalStrikeCost);
-
-        const invested = shareholderSummary?.totalInvested || 0;
-        p.totalInvested = invested;
-
-        // Multiple calculation
-        // If they have options, the "investment" is technically the strike price paid + original investment?
-        // Usually, multiple is on "Cash Invested". For employees with 0 cash invested, multiple is infinite.
-        // But if we deduct strike price from payout, we are treating it as a cost.
-        // Let's keep "Invested" as the original capital invested (0 for employees).
-        p.multiple = invested > 0 ? p.totalPayout / invested : 0;
-
+        p.multiple = p.totalInvested > 0 ? p.totalPayout / p.totalInvested : 0;
         results.push(p);
     });
 
