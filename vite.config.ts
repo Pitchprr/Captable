@@ -5,4 +5,8 @@ import react from '@vitejs/plugin-react'
 export default defineConfig({
   plugins: [react()],
   base: '/Captable/', // GitHub Pages base path (repository name)
+  server: {
+    open: true,
+    port: 5173
+  }
 })
