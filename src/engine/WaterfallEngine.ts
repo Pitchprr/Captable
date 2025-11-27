@@ -27,10 +27,28 @@ export const calculateWaterfall = (
         });
     });
 
-    // Calculate total participating shares (shares + options) to exclude unallocated pool
+    // Identify Non-Participating share classes
+    const nonParticipatingClasses = new Set<string>();
+    preferences.forEach(pref => {
+        if (pref.type === 'Non-Participating') {
+            const round = capTable.rounds.find(r => r.id === pref.roundId);
+            if (round) {
+                nonParticipatingClasses.add(round.shareClass);
+            }
+        }
+    });
+
+    // Calculate total participating shares (shares + options) to exclude unallocated pool AND non-participating classes
     let totalParticipatingShares = 0;
     summary.forEach(s => {
-        totalParticipatingShares += s.totalShares + s.totalOptions;
+        // Sum only participating shares
+        Object.entries(s.sharesByClass).forEach(([className, shares]) => {
+            if (!nonParticipatingClasses.has(className)) {
+                totalParticipatingShares += shares;
+            }
+        });
+        // Options are always considered participating (usually convert to Ordinary)
+        totalParticipatingShares += s.totalOptions;
     });
 
     let remainingProceeds = exitValuation;
@@ -353,13 +371,15 @@ export const calculateWaterfall = (
         const shareClasses = new Map<string, { shares: number, shareholders: string[] }>();
         summary.forEach(s => {
             Object.entries(s.sharesByClass).forEach(([className, shares]) => {
-                if (!shareClasses.has(className)) {
-                    shareClasses.set(className, { shares: 0, shareholders: [] });
-                }
-                const classData = shareClasses.get(className)!;
-                classData.shares += shares;
-                if (!classData.shareholders.includes(s.shareholderId)) {
-                    classData.shareholders.push(s.shareholderId);
+                if (!nonParticipatingClasses.has(className)) {
+                    if (!shareClasses.has(className)) {
+                        shareClasses.set(className, { shares: 0, shareholders: [] });
+                    }
+                    const classData = shareClasses.get(className)!;
+                    classData.shares += shares;
+                    if (!classData.shareholders.includes(s.shareholderId)) {
+                        classData.shareholders.push(s.shareholderId);
+                    }
                 }
             });
             // Add options to Ordinary class
@@ -381,18 +401,31 @@ export const calculateWaterfall = (
         summary.forEach(s => {
             const p = payouts.get(s.shareholderId);
             if (p) {
-                const shareholderPortion = ((s.totalShares + s.totalOptions) / totalParticipatingShares) * remainingProceeds;
-                p.participationPayout += shareholderPortion;
-
-                // Track by class
+                // Calculate eligible shares for this shareholder (excluding non-participating classes)
+                let eligibleShares = 0;
                 Object.entries(s.sharesByClass).forEach(([className, shares]) => {
-                    const classPortion = (shares / totalParticipatingShares) * remainingProceeds;
-                    distributionByClass.set(className, (distributionByClass.get(className) || 0) + classPortion);
+                    if (!nonParticipatingClasses.has(className)) {
+                        eligibleShares += shares;
+                    }
                 });
-                // Track options as Ordinary
-                if (s.totalOptions > 0) {
-                    const optionsPortion = (s.totalOptions / totalParticipatingShares) * remainingProceeds;
-                    distributionByClass.set('Ordinary', (distributionByClass.get('Ordinary') || 0) + optionsPortion);
+                eligibleShares += s.totalOptions;
+
+                if (eligibleShares > 0) {
+                    const shareholderPortion = (eligibleShares / totalParticipatingShares) * remainingProceeds;
+                    p.participationPayout += shareholderPortion;
+
+                    // Track by class
+                    Object.entries(s.sharesByClass).forEach(([className, shares]) => {
+                        if (!nonParticipatingClasses.has(className)) {
+                            const classPortion = (shares / totalParticipatingShares) * remainingProceeds;
+                            distributionByClass.set(className, (distributionByClass.get(className) || 0) + classPortion);
+                        }
+                    });
+                    // Track options as Ordinary
+                    if (s.totalOptions > 0) {
+                        const optionsPortion = (s.totalOptions / totalParticipatingShares) * remainingProceeds;
+                        distributionByClass.set('Ordinary', (distributionByClass.get('Ordinary') || 0) + optionsPortion);
+                    }
                 }
             }
         });
@@ -413,7 +446,11 @@ export const calculateWaterfall = (
             // Collect shareholders for this class
             const classShareholders: { id: string, name: string, amount: number }[] = [];
             summary.forEach(s => {
-                let sShares = s.sharesByClass[className] || 0;
+                let sShares = 0;
+                if (!nonParticipatingClasses.has(className)) {
+                    sShares = s.sharesByClass[className] || 0;
+                }
+
                 if (className === 'Ordinary') {
                     sShares += s.totalOptions;
                 }
