@@ -524,6 +524,13 @@ function App() {
               <Download className="w-4 h-4" />
               Export Excel
             </button>
+            <button
+              onClick={() => window.open('http://localhost:5173', '_blank')}
+              className="flex items-center gap-2 px-4 py-2 bg-white border border-slate-300 rounded-lg text-slate-700 hover:bg-slate-50 hover:border-slate-400 transition-all shadow-sm font-medium text-sm"
+            >
+              <LayoutDashboard className="w-4 h-4" />
+              Open in Chrome
+            </button>
           </div>
         </header>
 
