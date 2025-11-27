@@ -63,16 +63,35 @@ export const calculateWaterfall = (
                 }
 
                 const conversionValue = effectiveExit * ownershipPct;
+                const fmt = (n: number) => Math.round(n).toLocaleString() + '€';
 
                 if (conversionValue > prefClaim) {
                     // OPTION B: Convert to Ordinary
                     convertedClasses.add(round.shareClass);
                     // Do NOT add to nonParticipatingClasses (so they are included in catch-up)
                     // Do NOT add to effectivePreferences (so they don't get a pref step)
+                    steps.push({
+                        stepNumber: 0,
+                        stepName: `Decision: ${round.shareClass}`,
+                        description: `Converts to Ordinary: Pro-rata (${fmt(conversionValue)}) > Pref (${fmt(prefClaim)})`,
+                        shareClass: round.shareClass,
+                        amount: 0,
+                        remainingBalance: exitValuation,
+                        isTotal: false
+                    });
                 } else {
                     // OPTION A: Keep Preference
                     nonParticipatingClasses.add(round.shareClass);
                     effectivePreferences.push(pref);
+                    steps.push({
+                        stepNumber: 0,
+                        stepName: `Decision: ${round.shareClass}`,
+                        description: `Keeps Preference: Pref (${fmt(prefClaim)}) > Pro-rata (${fmt(conversionValue)})`,
+                        shareClass: round.shareClass,
+                        amount: 0,
+                        remainingBalance: exitValuation,
+                        isTotal: false
+                    });
                 }
             }
         } else {
