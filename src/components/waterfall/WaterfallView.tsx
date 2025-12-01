@@ -1,7 +1,7 @@
 import React, { useState, useMemo } from 'react';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip as RechartsTooltip, Legend, ResponsiveContainer } from 'recharts';
 import { Layers, CheckCircle2, X } from 'lucide-react';
-import type { CapTable, LiquidationPreference, CarveOutBeneficiary, PayoutStructure, WaterfallStep, EarnoutConfig } from '../../engine/types';
+import type { CapTable, LiquidationPreference, CarveOutBeneficiary, PayoutStructure, WaterfallStep } from '../../engine/types';
 import { calculateWaterfall } from '../../engine/WaterfallEngine';
 import { formatCurrency } from '../../utils';
 import { Input } from '../ui/Input';
@@ -18,8 +18,6 @@ interface WaterfallViewProps {
     setCarveOutPercent: (val: number) => void;
     carveOutBeneficiary: CarveOutBeneficiary;
     setCarveOutBeneficiary: (val: CarveOutBeneficiary) => void;
-    earnoutConfig: EarnoutConfig;
-    setEarnoutConfig: (config: EarnoutConfig) => void;
 }
 
 export const WaterfallView: React.FC<WaterfallViewProps> = ({
@@ -31,9 +29,7 @@ export const WaterfallView: React.FC<WaterfallViewProps> = ({
     carveOutPercent,
     setCarveOutPercent,
     carveOutBeneficiary,
-    setCarveOutBeneficiary,
-    earnoutConfig,
-    setEarnoutConfig
+    setCarveOutBeneficiary
 }) => {
     const [payoutStructure, setPayoutStructure] = useState<PayoutStructure>('standard');
     const [expandedStep, setExpandedStep] = useState<WaterfallStep | null>(null);
@@ -118,38 +114,6 @@ export const WaterfallView: React.FC<WaterfallViewProps> = ({
                                 />
                             </div>
                         </div>
-                    </div>
-
-                    {/* Earn-out Toggle */}
-                    <div className="bg-white p-6 rounded-xl border border-slate-200 shadow-sm">
-                        <div className="flex items-center justify-between">
-                            <div>
-                                <h3 className="text-lg font-semibold text-slate-800">Earn-out</h3>
-                                <p className="text-sm text-slate-500">Activer le module de gestion d'earn-out</p>
-                            </div>
-                            <label className="relative inline-flex items-center cursor-pointer">
-                                <input
-                                    type="checkbox"
-                                    className="sr-only peer"
-                                    checked={earnoutConfig.enabled}
-                                    onChange={(e) => setEarnoutConfig({ ...earnoutConfig, enabled: e.target.checked })}
-                                />
-                                <div className="w-11 h-6 bg-slate-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-blue-300 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-blue-600"></div>
-                            </label>
-                        </div>
-                        {!earnoutConfig.enabled && (
-                            <div className="mt-3 p-3 bg-slate-50 border border-slate-200 rounded-lg text-xs text-slate-500">
-                                Activez cette option pour configurer des compléments de prix, des conditions de performance et simuler leur impact sur la waterfall.
-                            </div>
-                        )}
-                        {earnoutConfig.enabled && (
-                            <div className="mt-3 p-3 bg-blue-50 border border-blue-100 rounded-lg text-xs text-blue-700 flex items-start gap-2">
-                                <div className="mt-0.5">ℹ️</div>
-                                <div>
-                                    Le module Earn-out est activé. Accédez à l'onglet <strong>Earn-out</strong> pour configurer les paramètres.
-                                </div>
-                            </div>
-                        )}
                     </div>
 
                     {/* Carve-Out */}

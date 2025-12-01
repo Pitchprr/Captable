@@ -157,36 +157,3 @@ export interface WaterfallResult {
     steps: WaterfallStep[];
     payouts: WaterfallPayout[];
 }
-
-// Earn-out Types
-
-export interface GeneralParams {
-    // To be defined in next steps
-}
-
-export interface PaymentStructure {
-    // To be defined in next steps
-}
-
-export interface BeneficiaryAllocation {
-    // To be defined in next steps
-}
-
-export interface Clause {
-    // To be defined in next steps
-}
-
-export interface SimulationScenarios {
-    // To be defined in next steps
-}
-
-export interface EarnoutConfig {
-    enabled: boolean;
-    generalParams: GeneralParams | null;
-    paymentStructure: PaymentStructure | null;
-    beneficiaries: BeneficiaryAllocation | null;
-    additionalClauses: Clause[] | null;
-    simulation: SimulationScenarios | null;
-    lastModified: string; // ISO Date string
-    completionRate: number; // 0-100%
-}
