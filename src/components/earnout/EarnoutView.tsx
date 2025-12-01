@@ -187,7 +187,7 @@ const Section: React.FC<SectionProps> = ({ title, isOpen, onToggle, children, st
             </button>
 
             {isOpen && (
-                <div className="border-t border-slate-200 animate-in slide-in-from-top-2 duration-200">
+                <div className="border-t border-slate-200">
                     {children}
                     <div className="p-4 bg-slate-50 border-t border-slate-100 flex justify-end">
                         <button className="flex items-center gap-2 px-4 py-2 text-slate-600 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-colors text-sm font-medium">
