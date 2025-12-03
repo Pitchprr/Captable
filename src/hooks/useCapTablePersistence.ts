@@ -1,6 +1,6 @@
 import { useEffect, useCallback, useRef, useState } from 'react';
 import LZString from 'lz-string';
-import type { CapTable, LiquidationPreference, CarveOutBeneficiary } from '../engine/types';
+import type { CapTable, LiquidationPreference, CarveOutBeneficiary, EarnoutConfig } from '../engine/types';
 
 interface PersistedState {
     capTable: CapTable;
@@ -8,6 +8,7 @@ interface PersistedState {
     carveOutPercent: number;
     carveOutBeneficiary: CarveOutBeneficiary;
     exitValuation: number;
+    earnoutConfig?: EarnoutConfig;
 }
 
 const LOCALSTORAGE_KEY = 'captable-autosave';

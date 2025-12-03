@@ -157,3 +157,12 @@ export interface WaterfallResult {
     steps: WaterfallStep[];
     payouts: WaterfallPayout[];
 }
+
+export interface EarnoutConfig {
+    enabled: boolean;
+    generalParams: any;
+    paymentStructure: any;
+    beneficiaries: any;
+    clauses: any;
+    simulation: any;
+}

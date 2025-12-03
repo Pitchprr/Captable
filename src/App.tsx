@@ -1,7 +1,8 @@
 import { useState, useEffect } from 'react';
-import type { CapTable, LiquidationPreference, CarveOutBeneficiary } from './engine/types';
+import type { CapTable, LiquidationPreference, CarveOutBeneficiary, EarnoutConfig } from './engine/types';
 import { calculateCapTableState } from './engine/CapTableEngine';
-import { LayoutDashboard, PieChart, TrendingUp, Download, Undo2, Redo2, Share2, Check, Save } from 'lucide-react';
+import { LayoutDashboard, PieChart, TrendingUp, Download, Undo2, Redo2, Share2, Check, Save, Coins } from 'lucide-react';
+import { EarnoutView } from './components/earnout/EarnoutView';
 import { CapTableView } from './components/captable/CapTableView';
 import { FounderSetup } from './components/captable/FounderSetup';
 import { WaterfallView } from './components/waterfall/WaterfallView';
@@ -17,6 +18,7 @@ interface AppState {
   preferences: LiquidationPreference[];
   carveOutPercent: number;
   carveOutBeneficiary: CarveOutBeneficiary;
+  earnoutConfig: EarnoutConfig;
 }
 
 // Initial sample data
@@ -116,9 +118,19 @@ const initialCapTable: CapTable = {
   ]
 };
 
+const initialEarnoutConfig: EarnoutConfig = {
+  enabled: false,
+  generalParams: {},
+  paymentStructure: {},
+  beneficiaries: {},
+  clauses: {},
+  simulation: {}
+};
+
 function App() {
-  const [activeTab, setActiveTab] = useState<'captable' | 'waterfall'>('captable');
+  const [activeTab, setActiveTab] = useState<'captable' | 'waterfall' | 'earnout'>('captable');
   const [capTable, setCapTable] = useState<CapTable>(initialCapTable);
+  const [earnoutConfig, setEarnoutConfig] = useState<EarnoutConfig>(initialEarnoutConfig);
   const [history, setHistory] = useState<AppState[]>([]);
   const [historyIndex, setHistoryIndex] = useState<number>(-1);
   const [exitValuation, setExitValuation] = useState<number>(50000000);
@@ -140,7 +152,8 @@ function App() {
       preferences,
       carveOutPercent,
       carveOutBeneficiary,
-      exitValuation
+      exitValuation,
+      earnoutConfig
     },
     (loadedState) => {
       if (loadedState) {
@@ -149,6 +162,9 @@ function App() {
         setCarveOutPercent(loadedState.carveOutPercent);
         setCarveOutBeneficiary(loadedState.carveOutBeneficiary);
         setExitValuation(loadedState.exitValuation);
+        if (loadedState.earnoutConfig) {
+          setEarnoutConfig(loadedState.earnoutConfig);
+        }
       }
       // Always mark loading as complete after a short delay to let state settle
       setTimeout(() => setIsLoadingFromPersistence(false), 100);
@@ -273,6 +289,7 @@ function App() {
     setPreferences([]);
     setCarveOutPercent(0);
     setCarveOutBeneficiary('everyone');
+    setEarnoutConfig(initialEarnoutConfig);
     setHistory([]);
     setHistoryIndex(-1);
     setIsResetModalOpen(false);
@@ -298,7 +315,8 @@ function App() {
       capTable,
       preferences,
       carveOutPercent,
-      carveOutBeneficiary
+      carveOutBeneficiary,
+      earnoutConfig
     });
 
     // Limit history to last 50 states to avoid memory issues
@@ -346,6 +364,11 @@ function App() {
     setCarveOutBeneficiary(newValue);
   };
 
+  const handleEarnoutConfigUpdate = (newConfig: EarnoutConfig) => {
+    saveToHistory();
+    setEarnoutConfig(newConfig);
+  };
+
   const handleUndo = () => {
     if (historyIndex >= 0 && history.length > 0) {
       const previousState = history[historyIndex];
@@ -353,6 +376,7 @@ function App() {
       setPreferences(previousState.preferences);
       setCarveOutPercent(previousState.carveOutPercent);
       setCarveOutBeneficiary(previousState.carveOutBeneficiary);
+      setEarnoutConfig(previousState.earnoutConfig);
       setHistoryIndex(historyIndex - 1);
     }
   };
@@ -365,6 +389,7 @@ function App() {
         setPreferences(nextState.preferences);
         setCarveOutPercent(nextState.carveOutPercent);
         setCarveOutBeneficiary(nextState.carveOutBeneficiary);
+        setEarnoutConfig(nextState.earnoutConfig);
         setHistoryIndex(historyIndex + 1);
       }
     }
@@ -437,6 +462,42 @@ function App() {
             <TrendingUp className="w-5 h-5" />
             <span className="font-medium">Waterfall Analysis</span>
           </button>
+
+          {earnoutConfig.enabled && (
+            <button
+              onClick={() => setActiveTab('earnout')}
+              className={`w-full flex items-center gap-3 px-4 py-3 rounded-lg transition-colors ${activeTab === 'earnout'
+                ? 'bg-blue-600 text-white shadow-lg shadow-blue-900/20'
+                : 'text-slate-400 hover:bg-slate-800 hover:text-white'
+                }`}
+            >
+              <Coins className="w-5 h-5" />
+              <span className="font-medium">Earn-out</span>
+            </button>
+          )}
+
+          <div className="mt-4 px-4 pt-4 border-t border-slate-800">
+            <label className="flex items-center justify-between cursor-pointer group">
+              <span className="text-sm font-medium text-slate-400 group-hover:text-slate-300">Activer Earn-out</span>
+              <div className="relative inline-flex items-center cursor-pointer">
+                <input
+                  type="checkbox"
+                  className="sr-only peer"
+                  checked={earnoutConfig.enabled}
+                  onChange={(e) => {
+                    const enabled = e.target.checked;
+                    handleEarnoutConfigUpdate({ ...earnoutConfig, enabled });
+                    if (enabled) {
+                      setActiveTab('earnout');
+                    } else if (activeTab === 'earnout') {
+                      setActiveTab('waterfall');
+                    }
+                  }}
+                />
+                <div className="w-9 h-5 bg-slate-700 peer-focus:outline-none peer-focus:ring-2 peer-focus:ring-blue-600 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-blue-600"></div>
+              </div>
+            </label>
+          </div>
         </nav>
 
 
@@ -447,7 +508,7 @@ function App() {
         {/* Header */}
         <header className="h-16 bg-white border-b border-slate-200 flex items-center justify-between px-8 shadow-sm z-10">
           <h2 className="text-xl font-semibold text-slate-800">
-            {activeTab === 'captable' ? 'Cap Table Management' : 'Waterfall Analysis'}
+            {activeTab === 'captable' ? 'Cap Table Management' : activeTab === 'waterfall' ? 'Waterfall Analysis' : 'Earn-out Configuration'}
           </h2>
           <div className="flex items-center gap-3">
             <LocaleSelector currentLocale={locale} onChange={setLocale} />
@@ -544,7 +605,7 @@ function App() {
               ) : (
                 <CapTableView capTable={capTable} setCapTable={handleCapTableUpdate} />
               )
-            ) : (
+            ) : activeTab === 'waterfall' ? (
               <WaterfallView
                 capTable={capTable}
                 exitValuation={exitValuation}
@@ -555,6 +616,11 @@ function App() {
                 setCarveOutPercent={handleCarveOutPercentUpdate}
                 carveOutBeneficiary={carveOutBeneficiary}
                 setCarveOutBeneficiary={handleCarveOutBeneficiaryUpdate}
+              />
+            ) : (
+              <EarnoutView
+                config={earnoutConfig}
+                onChange={handleEarnoutConfigUpdate}
               />
             )}
           </div>
