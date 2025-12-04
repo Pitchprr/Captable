@@ -371,21 +371,31 @@ export function Simulation({ config, simulation, onChange, shareholders, capTabl
         return events.sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
     }, [generalParams, paymentStructure, simulation, clauses, calculateEarnedAmount]);
 
-    // Validations
+    // M&A Market Practice Validations (European Tech/VC Standards)
     const validations = useMemo(() => {
-        const results: { id: string; label: string; valid: boolean; message: string; warning?: boolean }[] = [];
-        const earnoutPercent = (generalParams.earnoutMax / generalParams.enterpriseValue) * 100;
+        const results: { id: string; label: string; valid: boolean; message: string; severity: 'error' | 'warning' | 'info' }[] = [];
+        const earnoutPercent = generalParams.enterpriseValue > 0
+            ? (generalParams.earnoutMax / generalParams.enterpriseValue) * 100
+            : 0;
+        const upfrontPercent = generalParams.enterpriseValue > 0
+            ? (generalParams.upfrontPayment / generalParams.enterpriseValue) * 100
+            : 0;
 
-        // Upfront + Earnout = EV
+        // ========================
+        // CRITICAL VALIDATIONS (BLOCKING)
+        // ========================
+
+        // 1. Upfront + Earnout = EV (Math check)
         const evCheck = Math.abs(generalParams.upfrontPayment + generalParams.earnoutMax - generalParams.enterpriseValue) < 1;
         results.push({
             id: 'ev-sum',
             label: 'Upfront + Earn-out = EV',
             valid: evCheck,
-            message: evCheck ? 'Validé' : `Écart de ${formatCurrency(Math.abs(generalParams.upfrontPayment + generalParams.earnoutMax - generalParams.enterpriseValue))} ${currencySymbol}`
+            message: evCheck ? 'Validé' : `Écart de ${formatCurrency(Math.abs(generalParams.upfrontPayment + generalParams.earnoutMax - generalParams.enterpriseValue))} ${currencySymbol}`,
+            severity: 'error'
         });
 
-        // Allocation = 100% (for custom method)
+        // 2. Allocation = 100% (for custom method)
         if (beneficiaries.method === 'custom') {
             const totalAlloc = beneficiaries.customAllocations.reduce((sum, a) => sum + a.allocationPercent, 0);
             const allocCheck = Math.abs(totalAlloc - 100) < 0.1;
@@ -393,59 +403,230 @@ export function Simulation({ config, simulation, onChange, shareholders, capTabl
                 id: 'alloc-100',
                 label: 'Allocation = 100%',
                 valid: allocCheck,
-                message: allocCheck ? 'Validé' : `Total: ${totalAlloc.toFixed(1)}%`
+                message: allocCheck ? 'Validé' : `Total: ${totalAlloc.toFixed(1)}%`,
+                severity: 'error'
             });
         }
 
-        // Dates coherency
+        // 3. Dates coherency
         if (generalParams.closingDate && generalParams.endDate) {
             const datesValid = new Date(generalParams.endDate) > new Date(generalParams.closingDate);
             results.push({
                 id: 'dates',
                 label: 'Dates cohérentes',
                 valid: datesValid,
-                message: datesValid ? 'Validé' : 'Date de fin avant le closing'
+                message: datesValid ? 'Validé' : 'Date de fin avant le closing',
+                severity: 'error'
             });
         }
 
-        // Warning: Earnout > 50% EV
-        if (earnoutPercent > 50) {
+        // 4. Minimum Upfront (M&A Standard: min 50% upfront)
+        if (upfrontPercent < 50 && generalParams.enterpriseValue > 0) {
+            results.push({
+                id: 'upfront-min',
+                label: 'Upfront < 50% EV',
+                valid: false,
+                message: `Upfront à ${upfrontPercent.toFixed(0)}% - Minimum marché: 50%`,
+                severity: 'error'
+            });
+        }
+
+        // ========================
+        // WARNINGS (M&A BEST PRACTICES)
+        // ========================
+
+        // 5. Earnout > 35% EV (European standard max)
+        if (earnoutPercent > 35) {
             results.push({
                 id: 'earnout-high',
-                label: 'Earn-out > 50% EV',
+                label: 'Earn-out > 35% EV',
                 valid: false,
-                warning: true,
-                message: `Earn-out représente ${earnoutPercent.toFixed(1)}% de l'EV`
+                message: `Earn-out à ${earnoutPercent.toFixed(0)}% - Standard marché: 20-30%`,
+                severity: earnoutPercent > 50 ? 'error' : 'warning'
             });
         }
 
-        // Warning: Concentration > 30%
-        const maxConcentration = distributionData.length > 0
-            ? Math.max(...distributionData.map(d => d.captablePercent))
-            : 0;
-        if (maxConcentration > 30) {
+        // 6. Duration > 36 months (M&A standard max for tech)
+        if (generalParams.duration > 36) {
             results.push({
-                id: 'concentration',
-                label: 'Concentration > 30%',
+                id: 'duration-long',
+                label: 'Durée Earn-out > 36 mois',
                 valid: false,
-                warning: true,
-                message: `Un bénéficiaire reçoit ${maxConcentration.toFixed(1)}%`
+                message: `Durée de ${generalParams.duration} mois - Standard marché: 18-24 mois`,
+                severity: generalParams.duration > 48 ? 'error' : 'warning'
             });
         }
 
-        // Warning: Participating preferred with total proceeds
+        // 7. Duration < 12 months (Too short for meaningful metrics)
+        if (generalParams.duration > 0 && generalParams.duration < 12) {
+            results.push({
+                id: 'duration-short',
+                label: 'Durée Earn-out < 12 mois',
+                valid: false,
+                message: `Période trop courte pour mesures fiables`,
+                severity: 'warning'
+            });
+        }
+
+        // 8. Escrow > 20% (European standard max)
+        if (clauses.escrow.enabled && clauses.escrow.percentage > 20) {
+            results.push({
+                id: 'escrow-high',
+                label: 'Escrow > 20%',
+                valid: false,
+                message: `Escrow à ${clauses.escrow.percentage}% - Standard marché: 10-15%`,
+                severity: clauses.escrow.percentage > 25 ? 'error' : 'warning'
+            });
+        }
+
+        // 9. Escrow duration > 18 months
+        if (clauses.escrow.enabled && clauses.escrow.duration > 18) {
+            results.push({
+                id: 'escrow-duration',
+                label: 'Durée Escrow > 18 mois',
+                valid: false,
+                message: `Escrow de ${clauses.escrow.duration} mois - Standard: 12-18 mois`,
+                severity: 'warning'
+            });
+        }
+
+        // 10. Combined earnout + escrow period > 36 months
+        const combinedPeriod = generalParams.duration + (clauses.escrow.enabled ? clauses.escrow.duration : 0);
+        if (combinedPeriod > 36) {
+            results.push({
+                id: 'combined-period',
+                label: 'Période totale > 36 mois',
+                valid: false,
+                message: `Earn-out (${generalParams.duration}m) + Escrow (${clauses.escrow.duration}m) = ${combinedPeriod} mois`,
+                severity: 'warning'
+            });
+        }
+
+        // 11. No guaranteed floor with high earnout exposure
+        if (!clauses.guaranteedFloor.enabled && earnoutPercent > 25) {
+            results.push({
+                id: 'no-floor',
+                label: 'Pas de Floor garanti',
+                valid: false,
+                message: `Recommandé avec earn-out > 25% EV`,
+                severity: 'warning'
+            });
+        }
+
+        // 12. Floor > 50% of earnout (Too high)
+        if (clauses.guaranteedFloor.enabled && generalParams.earnoutMax > 0) {
+            const floorPercent = (clauses.guaranteedFloor.value / generalParams.earnoutMax) * 100;
+            if (floorPercent > 50) {
+                results.push({
+                    id: 'floor-high',
+                    label: 'Floor > 50% Earn-out',
+                    valid: false,
+                    message: `Floor à ${floorPercent.toFixed(0)}% du earn-out - Limite incitative`,
+                    severity: 'warning'
+                });
+            }
+        }
+
+        // 13. Individual cap validation
+        if (clauses.individualCap.enabled && clauses.individualCap.value > 0) {
+            const capVsEarnout = (clauses.individualCap.value / generalParams.earnoutMax) * 100;
+            if (capVsEarnout < 10) {
+                results.push({
+                    id: 'cap-low',
+                    label: 'Cap individuel < 10% Earn-out',
+                    valid: false,
+                    message: `Cap trop restrictif - Risque de démotivation`,
+                    severity: 'warning'
+                });
+            }
+        }
+
+        // ========================
+        // INFO (RECOMMENDATIONS)
+        // ========================
+
+        // 14. Carve-out founders/management best practice
+        if (beneficiaries.method === 'carve-out') {
+            const foundersGroup = beneficiaries.carveOutGroups?.find(g => g.id === 'founders');
+            if (foundersGroup && foundersGroup.value < 50) {
+                results.push({
+                    id: 'carveout-founders',
+                    label: 'Fondateurs < 50% Carve-out',
+                    valid: true,
+                    message: `Fondateurs à ${foundersGroup.value}% - Standard: 50-70%`,
+                    severity: 'info'
+                });
+            }
+        }
+
+        // 15. Participating preferred with total proceeds mode
         if (simulation.liquidationPreferenceMode === 'total-proceeds') {
             results.push({
                 id: 'participating',
                 label: 'Liquidation sur Total Proceeds',
                 valid: true,
-                warning: true,
-                message: 'Recalcul waterfall à chaque versement earn-out'
+                message: 'Recalcul waterfall à chaque versement earn-out',
+                severity: 'info'
             });
         }
 
+        // 16. Tax rates sanity check
+        if (clauses.taxRates.founders < 20 || clauses.taxRates.founders > 50) {
+            results.push({
+                id: 'tax-founders',
+                label: 'Taux fiscal fondateurs atypique',
+                valid: false,
+                message: `Taux à ${clauses.taxRates.founders}% - Standard France: 30%`,
+                severity: 'info'
+            });
+        }
+
+        // 17. Multi-milestone: check for balanced distribution
+        if (paymentStructure.type === 'multi-milestones' && paymentStructure.multiMilestones?.milestones) {
+            const milestones = paymentStructure.multiMilestones.milestones;
+            const totalPercent = milestones.reduce((sum, m) => sum + m.earnoutPercent, 0);
+
+            if (Math.abs(totalPercent - 100) > 0.1) {
+                results.push({
+                    id: 'milestones-sum',
+                    label: 'Milestones ≠ 100%',
+                    valid: false,
+                    message: `Total: ${totalPercent.toFixed(1)}% - Doit être 100%`,
+                    severity: 'error'
+                });
+            }
+
+            // Check for single milestone concentration
+            const maxMilestone = Math.max(...milestones.map(m => m.earnoutPercent));
+            if (maxMilestone > 60) {
+                results.push({
+                    id: 'milestone-concentration',
+                    label: 'Concentration milestone',
+                    valid: false,
+                    message: `Un milestone = ${maxMilestone}% - Risque binaire élevé`,
+                    severity: 'warning'
+                });
+            }
+        }
+
+        // 18. EV sanity check vs typical tech multiples
+        if (generalParams.enterpriseValue > 0) {
+            const evCheck = generalParams.enterpriseValue >= 1000000 && generalParams.enterpriseValue <= 10000000000;
+            if (!evCheck) {
+                results.push({
+                    id: 'ev-sanity',
+                    label: 'EV hors range typique',
+                    valid: false,
+                    message: generalParams.enterpriseValue < 1000000
+                        ? 'EV < 1M€ - Vérifier cohérence'
+                        : 'EV > 10Mds€ - Transaction exceptionnelle',
+                    severity: 'info'
+                });
+            }
+        }
+
         return results;
-    }, [generalParams, beneficiaries, distributionData, simulation, currencySymbol]);
+    }, [generalParams, beneficiaries, paymentStructure, clauses, simulation, distributionData, currencySymbol]);
 
     // Export handlers
     const handleExportCSV = () => {
@@ -690,9 +871,9 @@ export function Simulation({ config, simulation, onChange, shareholders, capTabl
                                     <td className="px-3 py-3 text-right">
                                         {d.multiple > 0 ? (
                                             <span className={`px-2 py-0.5 rounded-full text-xs font-bold ${d.multiple >= 3 ? 'bg-green-100 text-green-700' :
-                                                    d.multiple >= 2 ? 'bg-emerald-100 text-emerald-700' :
-                                                        d.multiple >= 1 ? 'bg-blue-100 text-blue-700' :
-                                                            'bg-red-100 text-red-700'
+                                                d.multiple >= 2 ? 'bg-emerald-100 text-emerald-700' :
+                                                    d.multiple >= 1 ? 'bg-blue-100 text-blue-700' :
+                                                        'bg-red-100 text-red-700'
                                                 }`}>
                                                 {d.multiple.toFixed(1)}x
                                             </span>
@@ -838,34 +1019,117 @@ export function Simulation({ config, simulation, onChange, shareholders, capTabl
                 </div>
             </div>
 
-            {/* Validations */}
+            {/* M&A Validations & Market Practice Alerts */}
             <div className="bg-white border border-slate-200 rounded-xl p-6">
-                <h3 className="text-lg font-semibold text-slate-800 mb-4">Validations & Alertes</h3>
-                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                    {validations.map(v => (
-                        <div key={v.id} className={`flex items-start gap-3 p-4 rounded-lg border ${v.valid && !v.warning ? 'bg-green-50 border-green-200' :
-                            v.warning ? 'bg-amber-50 border-amber-200' :
-                                'bg-red-50 border-red-200'
-                            }`}>
-                            {v.valid && !v.warning ? (
-                                <CheckCircle2 className="w-5 h-5 text-green-600 shrink-0 mt-0.5" />
-                            ) : v.warning ? (
-                                <AlertTriangle className="w-5 h-5 text-amber-600 shrink-0 mt-0.5" />
-                            ) : (
-                                <AlertTriangle className="w-5 h-5 text-red-600 shrink-0 mt-0.5" />
-                            )}
-                            <div>
-                                <div className={`font-medium ${v.valid && !v.warning ? 'text-green-800' :
-                                    v.warning ? 'text-amber-800' :
-                                        'text-red-800'
-                                    }`}>{v.label}</div>
-                                <div className={`text-sm ${v.valid && !v.warning ? 'text-green-600' :
-                                    v.warning ? 'text-amber-600' :
-                                        'text-red-600'
-                                    }`}>{v.message}</div>
-                            </div>
+                <div className="flex items-center justify-between mb-4">
+                    <h3 className="text-lg font-semibold text-slate-800">Validations M&A & Alertes</h3>
+                    <div className="flex gap-2 text-xs">
+                        <span className="flex items-center gap-1 px-2 py-1 bg-red-100 text-red-700 rounded">
+                            {validations.filter(v => v.severity === 'error' && !v.valid).length} Erreurs
+                        </span>
+                        <span className="flex items-center gap-1 px-2 py-1 bg-amber-100 text-amber-700 rounded">
+                            {validations.filter(v => v.severity === 'warning' && !v.valid).length} Warnings
+                        </span>
+                        <span className="flex items-center gap-1 px-2 py-1 bg-blue-100 text-blue-700 rounded">
+                            {validations.filter(v => v.severity === 'info').length} Info
+                        </span>
+                    </div>
+                </div>
+
+                {/* Critical Errors */}
+                {validations.filter(v => v.severity === 'error' && !v.valid).length > 0 && (
+                    <div className="mb-4">
+                        <h4 className="text-sm font-semibold text-red-800 mb-2 flex items-center gap-1">
+                            🚫 Blocages (Non conforme aux standards M&A)
+                        </h4>
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                            {validations.filter(v => v.severity === 'error' && !v.valid).map(v => (
+                                <div key={v.id} className="flex items-start gap-3 p-3 rounded-lg border bg-red-50 border-red-300">
+                                    <AlertTriangle className="w-5 h-5 text-red-600 shrink-0 mt-0.5" />
+                                    <div>
+                                        <div className="font-medium text-red-800">{v.label}</div>
+                                        <div className="text-sm text-red-600">{v.message}</div>
+                                    </div>
+                                </div>
+                            ))}
                         </div>
-                    ))}
+                    </div>
+                )}
+
+                {/* Warnings */}
+                {validations.filter(v => v.severity === 'warning' && !v.valid).length > 0 && (
+                    <div className="mb-4">
+                        <h4 className="text-sm font-semibold text-amber-800 mb-2 flex items-center gap-1">
+                            ⚠️ Warnings (Écart aux best practices)
+                        </h4>
+                        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
+                            {validations.filter(v => v.severity === 'warning' && !v.valid).map(v => (
+                                <div key={v.id} className="flex items-start gap-3 p-3 rounded-lg border bg-amber-50 border-amber-200">
+                                    <AlertTriangle className="w-4 h-4 text-amber-600 shrink-0 mt-0.5" />
+                                    <div>
+                                        <div className="font-medium text-amber-800 text-sm">{v.label}</div>
+                                        <div className="text-xs text-amber-600">{v.message}</div>
+                                    </div>
+                                </div>
+                            ))}
+                        </div>
+                    </div>
+                )}
+
+                {/* Passed Validations */}
+                {validations.filter(v => v.valid && v.severity === 'error').length > 0 && (
+                    <div className="mb-4">
+                        <h4 className="text-sm font-semibold text-green-800 mb-2 flex items-center gap-1">
+                            ✓ Validations passées
+                        </h4>
+                        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
+                            {validations.filter(v => v.valid && v.severity === 'error').map(v => (
+                                <div key={v.id} className="flex items-start gap-3 p-3 rounded-lg border bg-green-50 border-green-200">
+                                    <CheckCircle2 className="w-4 h-4 text-green-600 shrink-0 mt-0.5" />
+                                    <div>
+                                        <div className="font-medium text-green-800 text-sm">{v.label}</div>
+                                        <div className="text-xs text-green-600">{v.message}</div>
+                                    </div>
+                                </div>
+                            ))}
+                        </div>
+                    </div>
+                )}
+
+                {/* Info / Recommendations */}
+                {validations.filter(v => v.severity === 'info').length > 0 && (
+                    <div>
+                        <h4 className="text-sm font-semibold text-blue-800 mb-2 flex items-center gap-1">
+                            ℹ️ Recommandations
+                        </h4>
+                        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
+                            {validations.filter(v => v.severity === 'info').map(v => (
+                                <div key={v.id} className="flex items-start gap-3 p-2 rounded-lg border bg-blue-50 border-blue-200">
+                                    <div className="w-4 h-4 shrink-0 mt-0.5 text-blue-600 text-xs font-bold">ⓘ</div>
+                                    <div>
+                                        <div className="font-medium text-blue-800 text-sm">{v.label}</div>
+                                        <div className="text-xs text-blue-600">{v.message}</div>
+                                    </div>
+                                </div>
+                            ))}
+                        </div>
+                    </div>
+                )}
+
+                {/* Summary banner */}
+                <div className={`mt-4 p-3 rounded-lg text-sm font-medium flex items-center gap-2 ${validations.filter(v => v.severity === 'error' && !v.valid).length > 0
+                        ? 'bg-red-100 text-red-800 border border-red-300'
+                        : validations.filter(v => v.severity === 'warning' && !v.valid).length > 0
+                            ? 'bg-amber-100 text-amber-800 border border-amber-300'
+                            : 'bg-green-100 text-green-800 border border-green-300'
+                    }`}>
+                    {validations.filter(v => v.severity === 'error' && !v.valid).length > 0 ? (
+                        <>🚫 Transaction non conforme aux standards M&A européens - Corrections requises</>
+                    ) : validations.filter(v => v.severity === 'warning' && !v.valid).length > 0 ? (
+                        <>⚠️ Transaction conforme avec écarts aux best practices - À négocier</>
+                    ) : (
+                        <>✅ Transaction conforme aux standards M&A tech/VC européens</>
+                    )}
                 </div>
             </div>
         </div>

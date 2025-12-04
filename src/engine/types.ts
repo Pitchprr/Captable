@@ -97,10 +97,46 @@ export type PreferenceType = 'Non-Participating' | 'Participating';
 export type PayoutStructure = 'standard' | 'pari-passu';
 export type CarveOutBeneficiary = 'everyone' | 'founders-only' | 'team';
 
+// M&A Enhancement: Escrow configuration
+export interface EscrowConfig {
+    enabled: boolean;
+    percentage: number; // % of upfront held in escrow
+    duration: number; // months
+}
+
+// M&A Enhancement: Net Working Capital adjustment
+export interface NWCConfig {
+    enabled: boolean;
+    targetNWC: number; // Target NWC agreed in SPA
+    actualNWC: number; // Actual NWC at closing
+    // Adjustment = actual - target (positive = seller bonus, negative = buyer credit)
+}
+
+// M&A Enhancement: Representations & Warranties reserve
+export interface RWReserveConfig {
+    enabled: boolean;
+    percentage: number; // % of upfront held for R&W claims
+    duration: number; // months before release
+    claimedAmount: number; // Amount of R&W claims made
+}
+
+// M&A Enhancement: Acceleration triggers
+export interface AccelerationConfig {
+    enabled: boolean;
+    triggerType: 'secondary-exit' | 'ipo' | 'change-of-control';
+    accelerationPercent: number; // % of remaining earnout to accelerate
+}
+
 export interface WaterfallConfig {
     carveOutPercent: number; // % of proceeds carved out before distribution
     carveOutBeneficiary: CarveOutBeneficiary; // Who benefits from the carve-out
     payoutStructure: PayoutStructure; // Standard (stacked) or Pari Passu
+    // M&A Enhancements
+    escrow?: EscrowConfig;
+    nwcAdjustment?: NWCConfig;
+    rwReserve?: RWReserveConfig;
+    acceleration?: AccelerationConfig;
+    deductOptionStrike?: boolean; // If true, deduct strike price from option proceeds
 }
 
 export interface LiquidationPreference {
@@ -135,27 +171,53 @@ export interface WaterfallStep {
     amount: number;
     remainingBalance: number;
     isTotal?: boolean; // For "Total" rows
+    isParticipating?: boolean; // For participating preference steps
     details?: {
         shareholders: {
             id: string;
             name: string;
             amount: number;
+            // Detailed calculation breakdown
+            calculation?: {
+                shares: number;
+                totalPoolShares: number;
+                percentage: number;
+                formula: string;
+                poolAmount: number;
+                // FD breakdown for Ordinary class
+                ordinaryShares?: number;
+                optionsConverted?: number;
+            };
         }[];
         calculation?: {
             valuation?: number;
             pricePerShare?: number;
             preferenceMultiple?: number;
             totalShares?: number;
-            type?: 'Preference' | 'CarveOut' | 'Participation';
+            type?: 'Preference' | 'CarveOut' | 'Participation' | 'Catchup';
             shareClass?: string;
             investedAmount?: number;
+            // Global calculation info
+            totalEligibleShares?: number;
+            distributableAmount?: number;
+            formula?: string;
         };
     };
+}
+
+export interface ConversionDecision {
+    shareClass: string;
+    totalShares: number;
+    valueAsPref: number;
+    valueAsConverted: number;
+    decision: 'Keep Preference' | 'Convert to Ordinary';
+    reason: string;
 }
 
 export interface WaterfallResult {
     steps: WaterfallStep[];
     payouts: WaterfallPayout[];
+    conversionAnalysis: ConversionDecision[];
 }
 
 export type Currency = 'EUR' | 'USD' | 'GBP' | 'CHF';

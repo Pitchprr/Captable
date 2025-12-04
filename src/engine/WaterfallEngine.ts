@@ -12,6 +12,41 @@ export const calculateWaterfall = (
     const steps: WaterfallStep[] = [];
     let stepNumber = 0;
 
+    // ========================
+    // M&A ADJUSTMENTS (Pre-distribution)
+    // ========================
+
+    // 1. Net Working Capital Adjustment
+    let nwcAdjustment = 0;
+    if (config.nwcAdjustment?.enabled) {
+        nwcAdjustment = config.nwcAdjustment.actualNWC - config.nwcAdjustment.targetNWC;
+    }
+
+    // 2. R&W Reserve
+    let rwReserveAmount = 0;
+    if (config.rwReserve?.enabled && config.rwReserve.percentage > 0) {
+        rwReserveAmount = (exitValuation * config.rwReserve.percentage) / 100;
+    }
+
+    // 3. Escrow
+    let escrowAmount = 0;
+    if (config.escrow?.enabled && config.escrow.percentage > 0) {
+        escrowAmount = (exitValuation * config.escrow.percentage) / 100;
+    }
+
+    // Effective proceeds
+    const effectiveProceeds = exitValuation - escrowAmount - rwReserveAmount + nwcAdjustment;
+
+    // 4. Calculate option strike value deduction
+    let totalStrikeDeduction = 0;
+    if (config.deductOptionStrike !== false) {
+        capTable.optionGrants.forEach(grant => {
+            const round = capTable.rounds.find(r => r.id === grant.roundId);
+            const strikePrice = round?.strikePrice || round?.optionStrikePrice || round?.calculatedPricePerShare || 0;
+            totalStrikeDeduction += grant.shares * strikePrice;
+        });
+    }
+
     // Initialize payouts
     const payouts = new Map<string, WaterfallPayout>();
     summary.forEach(s => {
@@ -27,98 +62,126 @@ export const calculateWaterfall = (
         });
     });
 
-    // Calculate Total Fully Diluted Shares (for conversion checks)
+    // Add M&A adjustment steps
+    if (nwcAdjustment !== 0 || escrowAmount > 0 || rwReserveAmount > 0) {
+        stepNumber++;
+        if (nwcAdjustment !== 0) {
+            steps.push({
+                stepNumber,
+                stepName: `${stepNumber}/ NWC Adjustment`,
+                description: nwcAdjustment > 0 ? 'Seller bonus' : 'Buyer credit',
+                amount: nwcAdjustment,
+                remainingBalance: exitValuation + nwcAdjustment,
+                isTotal: false
+            });
+        }
+        if (escrowAmount > 0) {
+            steps.push({
+                stepNumber,
+                stepName: `${stepNumber}/ Escrow Hold`,
+                description: `${config.escrow?.percentage}% held for ${config.escrow?.duration} months`,
+                amount: -escrowAmount,
+                remainingBalance: effectiveProceeds + rwReserveAmount,
+                isTotal: false
+            });
+        }
+        if (rwReserveAmount > 0) {
+            steps.push({
+                stepNumber,
+                stepName: `${stepNumber}/ R&W Reserve`,
+                description: `${config.rwReserve?.percentage}% for R&W claims`,
+                amount: -rwReserveAmount,
+                remainingBalance: effectiveProceeds,
+                isTotal: false
+            });
+        }
+    }
+
+    // ========================
+    // CONVERSION ANALYSIS (Pre-Waterfall)
+    // ========================
+    const nonParticipatingClasses = new Set<string>();
+    const effectivePreferences: LiquidationPreference[] = [];
+    const convertedClasses = new Set<string>();
+    const conversionAnalysis: import('./types').ConversionDecision[] = [];
+
+    // Calculate Total Fully Diluted Shares
     let totalFullyDilutedShares = 0;
     summary.forEach(s => {
         totalFullyDilutedShares += s.totalShares + s.totalOptions;
     });
 
-    // Identify Non-Participating share classes and handle Conversion Logic
-    const nonParticipatingClasses = new Set<string>();
-    const effectivePreferences: LiquidationPreference[] = [];
-    const convertedClasses = new Set<string>();
+    // Helper to calculate theoretical value as Ordinary
+    const calculateAsConvertedValue = (shares: number) => {
+        if (totalFullyDilutedShares === 0) return 0;
+        return (shares / totalFullyDilutedShares) * effectiveProceeds;
+    };
 
     preferences.forEach(pref => {
-        if (pref.type === 'Non-Participating') {
-            const round = capTable.rounds.find(r => r.id === pref.roundId);
-            if (round) {
-                // 1. Calculate Preference Value (Option A)
-                let prefClaim = 0;
-                round.investments.forEach(inv => {
-                    prefClaim += inv.amount * pref.multiple;
-                });
+        const round = capTable.rounds.find(r => r.id === pref.roundId);
+        if (round) {
+            let classShares = 0;
+            summary.forEach(s => {
+                classShares += s.sharesByClass[round.shareClass] || 0;
+            });
 
-                // 2. Calculate Conversion Value (Option B)
-                // What % of the company do they own?
-                let classShares = 0;
-                summary.forEach(s => {
-                    classShares += s.sharesByClass[round.shareClass] || 0;
-                });
+            // 1. Preference Value
+            let prefClaim = 0;
+            round.investments.forEach(inv => {
+                prefClaim += inv.amount * pref.multiple;
+            });
 
-                const ownershipPct = totalFullyDilutedShares > 0 ? classShares / totalFullyDilutedShares : 0;
+            // 2. Conversion Value
+            const conversionValue = calculateAsConvertedValue(classShares);
 
-                let effectiveExit = exitValuation;
-                if (config.carveOutPercent > 0) {
-                    effectiveExit -= exitValuation * (config.carveOutPercent / 100);
-                }
+            let decision: 'Keep Preference' | 'Convert to Ordinary' = 'Keep Preference';
+            let reason = '';
 
-                const conversionValue = effectiveExit * ownershipPct;
-                const fmt = (n: number) => Math.round(n).toLocaleString() + '€';
-
+            if (pref.type === 'Non-Participating') {
                 if (conversionValue > prefClaim) {
-                    // OPTION B: Convert to Ordinary
+                    decision = 'Convert to Ordinary';
+                    reason = `Conversion (${Math.round(conversionValue).toLocaleString()}€) > Preference (${Math.round(prefClaim).toLocaleString()}€)`;
                     convertedClasses.add(round.shareClass);
-                    // Do NOT add to nonParticipatingClasses (so they are included in catch-up)
-                    // Do NOT add to effectivePreferences (so they don't get a pref step)
-                    steps.push({
-                        stepNumber: 0,
-                        stepName: `Decision: ${round.shareClass}`,
-                        description: `Converts to Ordinary: Pro-rata (${fmt(conversionValue)}) > Pref (${fmt(prefClaim)})`,
-                        shareClass: round.shareClass,
-                        amount: 0,
-                        remainingBalance: exitValuation,
-                        isTotal: false
-                    });
                 } else {
-                    // OPTION A: Keep Preference
+                    decision = 'Keep Preference';
+                    reason = `Preference (${Math.round(prefClaim).toLocaleString()}€) > Conversion (${Math.round(conversionValue).toLocaleString()}€)`;
                     nonParticipatingClasses.add(round.shareClass);
                     effectivePreferences.push(pref);
-                    steps.push({
-                        stepNumber: 0,
-                        stepName: `Decision: ${round.shareClass}`,
-                        description: `Keeps Preference: Pref (${fmt(prefClaim)}) > Pro-rata (${fmt(conversionValue)})`,
-                        shareClass: round.shareClass,
-                        amount: 0,
-                        remainingBalance: exitValuation,
-                        isTotal: false
-                    });
                 }
+            } else {
+                decision = 'Keep Preference';
+                reason = 'Participating Preferred (Double Dip)';
+                effectivePreferences.push(pref);
             }
-        } else {
-            // Participating preferences always keep their preference structure
-            effectivePreferences.push(pref);
+
+            conversionAnalysis.push({
+                shareClass: round.shareClass,
+                totalShares: classShares,
+                valueAsPref: prefClaim,
+                valueAsConverted: conversionValue,
+                decision: decision,
+                reason: reason
+            });
         }
     });
 
-    // Calculate total participating shares (shares + options) to exclude unallocated pool AND non-participating classes
+    // Calculate total participating shares
     let totalParticipatingShares = 0;
     summary.forEach(s => {
-        // Sum only participating shares
         Object.entries(s.sharesByClass).forEach(([className, shares]) => {
             if (!nonParticipatingClasses.has(className)) {
                 totalParticipatingShares += shares;
             }
         });
-        // Options are always considered participating (usually convert to Ordinary)
         totalParticipatingShares += s.totalOptions;
     });
 
-    let remainingProceeds = exitValuation;
+    let remainingProceeds = effectiveProceeds;
 
     // STEP 1: Carve-Out
     if (config.carveOutPercent > 0) {
         stepNumber++;
-        const carveOutAmount = exitValuation * (config.carveOutPercent / 100);
+        const carveOutAmount = effectiveProceeds * (config.carveOutPercent / 100);
         remainingProceeds -= carveOutAmount;
 
         let eligibleShareholders = summary;
@@ -208,7 +271,6 @@ export const calculateWaterfall = (
     }
 
     // STEP 2+: Liquidation Preferences
-    // Use effectivePreferences (which excludes converted classes)
     const sortedPrefs = [...effectivePreferences].sort((a, b) => a.seniority - b.seniority);
     const participatedClasses = new Set<string>();
 
@@ -366,10 +428,11 @@ export const calculateWaterfall = (
             steps.push({
                 stepNumber,
                 stepName: `${stepNumber}/ Liqu Pref ${round.shareClass}`,
-                description: `${round.shareClass} Shares`,
+                description: `${round.shareClass} Shares${pref.type === 'Participating' ? ' (Participating)' : ''}`,
                 shareClass: round.shareClass,
                 amount: preferencePaidAmount,
                 remainingBalance: remainingProceeds - preferencePaidAmount,
+                isParticipating: pref.type === 'Participating',
                 details: {
                     shareholders: stepShareholders,
                     calculation: {
@@ -388,25 +451,48 @@ export const calculateWaterfall = (
             // PARTICIPATING PREFERENCES
             if (pref.type === 'Participating' && remainingProceeds > 0) {
                 const roundSharesByHolder = new Map<string, number>();
+                const investmentByHolder = new Map<string, number>();
+
                 summary.forEach(s => {
                     const sharesInThisClass = s.sharesByClass[round.shareClass] || 0;
                     if (sharesInThisClass > 0) {
                         roundSharesByHolder.set(s.shareholderId, sharesInThisClass);
+                        const inv = round.investments.find(i => i.shareholderId === s.shareholderId);
+                        if (inv) {
+                            investmentByHolder.set(s.shareholderId, inv.amount);
+                        }
                     }
                 });
 
                 const totalRoundShares = Array.from(roundSharesByHolder.values()).reduce((sum, shares) => sum + shares, 0);
 
-                const participationAmount = totalRoundShares > 0 && totalParticipatingShares > 0
+                let participationAmount = totalRoundShares > 0 && totalParticipatingShares > 0
                     ? (totalRoundShares / totalParticipatingShares) * remainingProceeds
                     : 0;
 
                 const participationShareholders: { id: string, name: string, amount: number }[] = [];
+                let actualParticipationDistributed = 0;
+
                 roundSharesByHolder.forEach((shares, shareholderId) => {
                     const p = payouts.get(shareholderId);
                     if (p && totalRoundShares > 0) {
-                        const shareholderParticipation = (shares / totalRoundShares) * participationAmount;
+                        let shareholderParticipation = (shares / totalRoundShares) * participationAmount;
+
+                        // Apply CAP
+                        if (pref.cap && pref.cap > 0) {
+                            const investedAmount = investmentByHolder.get(shareholderId) || 0;
+                            const maxTotalPayout = investedAmount * pref.cap;
+                            const currentPref = round.investments.find(i => i.shareholderId === shareholderId)?.amount || 0;
+                            const prefPaid = currentPref * pref.multiple * (preferencePaidAmount / roundTotalClaim);
+                            const maxParticipation = Math.max(0, maxTotalPayout - prefPaid);
+
+                            if (shareholderParticipation > maxParticipation) {
+                                shareholderParticipation = maxParticipation;
+                            }
+                        }
+
                         p.participationPayout += shareholderParticipation;
+                        actualParticipationDistributed += shareholderParticipation;
 
                         const sName = summary.find(s => s.shareholderId === shareholderId)?.shareholderName || 'Unknown';
                         participationShareholders.push({
@@ -419,11 +505,12 @@ export const calculateWaterfall = (
 
                 steps.push({
                     stepNumber,
-                    stepName: `${stepNumber}/ Liqu Pref ${round.shareClass}`,
-                    description: `Pro-rata participation ${round.shareClass}`,
+                    stepName: `${stepNumber}/ Double Dip ${round.shareClass}`,
+                    description: pref.cap ? `Pro-rata participation (Capped at ${pref.cap}x)` : `Pro-rata participation (Double Dip)`,
                     shareClass: round.shareClass,
-                    amount: participationAmount,
-                    remainingBalance: remainingProceeds - participationAmount,
+                    amount: actualParticipationDistributed,
+                    remainingBalance: remainingProceeds - actualParticipationDistributed,
+                    isParticipating: true,
                     details: {
                         shareholders: participationShareholders,
                         calculation: {
@@ -434,14 +521,14 @@ export const calculateWaterfall = (
                     }
                 });
 
-                remainingProceeds -= participationAmount;
+                remainingProceeds -= actualParticipationDistributed;
                 participatedClasses.add(round.shareClass);
 
                 steps.push({
                     stepNumber,
                     stepName: `${stepNumber}/ Liqu Pref ${round.shareClass}`,
-                    description: `Total ${round.shareClass} (Pref + Participation)`,
-                    amount: preferencePaidAmount + participationAmount,
+                    description: `Total ${round.shareClass} (Pref + Participation${pref.cap ? ' capped' : ''})`,
+                    amount: preferencePaidAmount + actualParticipationDistributed,
                     remainingBalance: remainingProceeds,
                     isTotal: true
                 });
@@ -449,7 +536,7 @@ export const calculateWaterfall = (
         }
     }
 
-    // STEP N: Catch-up
+    // STEP N: Catch-up (Consolidated)
     if (remainingProceeds > 0 || totalParticipatingShares > 0) {
         stepNumber++;
 
@@ -461,7 +548,7 @@ export const calculateWaterfall = (
         });
         const sortedClasses = Array.from(allClasses).sort().reverse();
 
-        // 2. Calculate eligible shares for distribution
+        // 2. Calculate eligible shares
         let totalCatchupShares = 0;
         const classSharesMap = new Map<string, number>();
 
@@ -471,7 +558,6 @@ export const calculateWaterfall = (
             if (!nonParticipatingClasses.has(className) && !participatedClasses.has(className)) {
                 summary.forEach(s => {
                     if (className === 'Ordinary') {
-                        // Include BOTH actual Ordinary shares AND options
                         classShares += (s.sharesByClass[className] || 0) + s.totalOptions;
                     } else {
                         classShares += s.sharesByClass[className] || 0;
@@ -482,9 +568,26 @@ export const calculateWaterfall = (
             totalCatchupShares += classShares;
         });
 
-        // 3. Create steps for ALL classes
+        // 3. Create ONE consolidated step
         let currentBalance = remainingProceeds;
         const catchupProceeds = remainingProceeds;
+
+        const allCatchupShareholders: {
+            id: string,
+            name: string,
+            amount: number,
+            calculation?: {
+                shares: number;
+                totalPoolShares: number;
+                percentage: number;
+                formula: string;
+                poolAmount: number;
+                ordinaryShares?: number;
+                optionsConverted?: number;
+            }
+        }[] = [];
+
+        let totalDistributedInCatchup = 0;
 
         sortedClasses.forEach(className => {
             const eligibleShares = classSharesMap.get(className) || 0;
@@ -492,28 +595,57 @@ export const calculateWaterfall = (
                 ? (eligibleShares / totalCatchupShares) * catchupProceeds
                 : 0;
 
-            const classShareholders: { id: string, name: string, amount: number }[] = [];
-
             if (amount > 0) {
                 summary.forEach(s => {
                     let sShares = 0;
+                    let ordinaryShares = 0;
+                    let optionsConverted = 0;
+
                     if (className === 'Ordinary') {
-                        // Include BOTH actual Ordinary shares AND options
-                        sShares = (s.sharesByClass[className] || 0) + s.totalOptions;
+                        ordinaryShares = s.sharesByClass[className] || 0;
+                        optionsConverted = s.totalOptions;
+                        sShares = ordinaryShares + optionsConverted;
                     } else {
                         sShares = s.sharesByClass[className] || 0;
                     }
 
                     if (sShares > 0) {
-                        // Double check eligibility logic at shareholder level
                         if (!nonParticipatingClasses.has(className) && !participatedClasses.has(className)) {
                             const sAmount = (sShares / totalCatchupShares) * catchupProceeds;
+                            const percentage = (sShares / totalCatchupShares) * 100;
+
                             if (sAmount > 0) {
-                                classShareholders.push({
-                                    id: s.shareholderId,
-                                    name: s.shareholderName,
-                                    amount: sAmount
-                                });
+                                let formulaDetail = '';
+                                if (className === 'Ordinary' && optionsConverted > 0) {
+                                    formulaDetail = `(${ordinaryShares.toLocaleString()} shares + ${optionsConverted.toLocaleString()} options) / ${totalCatchupShares.toLocaleString()} × ${catchupProceeds.toLocaleString()}€ = ${Math.round(sAmount).toLocaleString()}€`;
+                                } else {
+                                    formulaDetail = `${sShares.toLocaleString()} / ${totalCatchupShares.toLocaleString()} × ${catchupProceeds.toLocaleString()}€ = ${Math.round(sAmount).toLocaleString()}€`;
+                                }
+
+                                const existingEntry = allCatchupShareholders.find(entry => entry.id === s.shareholderId);
+                                if (existingEntry) {
+                                    existingEntry.amount += sAmount;
+                                    if (existingEntry.calculation) {
+                                        existingEntry.calculation.shares += sShares;
+                                        existingEntry.calculation.percentage += percentage;
+                                        existingEntry.calculation.formula = `Cumul classes / ${totalCatchupShares.toLocaleString()} × ${catchupProceeds.toLocaleString()}€ = ${Math.round(existingEntry.amount).toLocaleString()}€`;
+                                    }
+                                } else {
+                                    allCatchupShareholders.push({
+                                        id: s.shareholderId,
+                                        name: s.shareholderName,
+                                        amount: sAmount,
+                                        calculation: {
+                                            shares: sShares,
+                                            totalPoolShares: totalCatchupShares,
+                                            percentage: percentage,
+                                            formula: formulaDetail,
+                                            poolAmount: catchupProceeds,
+                                            ordinaryShares: ordinaryShares,
+                                            optionsConverted: optionsConverted
+                                        }
+                                    });
+                                }
 
                                 const p = payouts.get(s.shareholderId);
                                 if (p) {
@@ -523,32 +655,34 @@ export const calculateWaterfall = (
                         }
                     }
                 });
+                totalDistributedInCatchup += amount;
             }
+        });
 
-            currentBalance = Math.max(0, currentBalance - amount);
+        if (totalDistributedInCatchup > 0) {
+            currentBalance = Math.max(0, currentBalance - totalDistributedInCatchup);
+            allCatchupShareholders.sort((a, b) => b.amount - a.amount);
 
             steps.push({
                 stepNumber,
-                stepName: `${stepNumber}/ Catch-up ${className}`,
-                description: `${className} Shares`,
-                shareClass: className,
-                amount: amount,
+                stepName: `${stepNumber}/ Distribution Finale (Pro-rata)`,
+                description: `Distribution aux actions Ordinaires & Participating (${sortedClasses.filter(c => !nonParticipatingClasses.has(c) && !participatedClasses.has(c)).join(', ')})`,
+                shareClass: 'All Participating',
+                amount: totalDistributedInCatchup,
                 remainingBalance: currentBalance,
                 details: {
-                    shareholders: classShareholders
+                    shareholders: allCatchupShareholders,
+                    calculation: {
+                        type: 'Catchup',
+                        shareClass: 'All Participating',
+                        totalShares: totalCatchupShares,
+                        totalEligibleShares: totalCatchupShares,
+                        distributableAmount: catchupProceeds,
+                        formula: `${totalCatchupShares.toLocaleString()} actions FD / ${totalCatchupShares.toLocaleString()} total × ${catchupProceeds.toLocaleString()}€ = ${Math.round(totalDistributedInCatchup).toLocaleString()}€`
+                    }
                 }
             });
-        });
-
-        // Total Catch-up Step
-        steps.push({
-            stepNumber,
-            stepName: `${stepNumber}/ Catch-up Total`,
-            description: 'Total catch-up',
-            amount: catchupProceeds,
-            remainingBalance: 0,
-            isTotal: true
-        });
+        }
     }
 
     // Finalize Payouts
@@ -567,6 +701,7 @@ export const calculateWaterfall = (
 
     return {
         steps,
-        payouts: results
+        payouts: results,
+        conversionAnalysis
     };
 };
