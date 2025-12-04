@@ -18,6 +18,9 @@ interface WaterfallViewProps {
     setCarveOutPercent: (val: number) => void;
     carveOutBeneficiary: CarveOutBeneficiary;
     setCarveOutBeneficiary: (val: CarveOutBeneficiary) => void;
+    earnoutEnabled?: boolean;
+    earnoutUpfront?: number;
+    earnoutMax?: number;
 }
 
 export const WaterfallView: React.FC<WaterfallViewProps> = ({
@@ -29,7 +32,10 @@ export const WaterfallView: React.FC<WaterfallViewProps> = ({
     carveOutPercent,
     setCarveOutPercent,
     carveOutBeneficiary,
-    setCarveOutBeneficiary
+    setCarveOutBeneficiary,
+    earnoutEnabled = false,
+    earnoutUpfront = 0,
+    earnoutMax = 0
 }) => {
     const [payoutStructure, setPayoutStructure] = useState<PayoutStructure>('standard');
     const [expandedStep, setExpandedStep] = useState<WaterfallStep | null>(null);
@@ -106,13 +112,71 @@ export const WaterfallView: React.FC<WaterfallViewProps> = ({
                         <h3 className="text-lg font-semibold text-slate-800 mb-4">Exit Scenario</h3>
                         <div className="space-y-4">
                             <div>
-                                <label className="block text-sm font-medium text-slate-700 mb-1">Exit Valuation</label>
+                                <label className="block text-sm font-medium text-slate-700 mb-1">
+                                    Exit Valuation (EV)
+                                    {earnoutEnabled && <span className="text-purple-600 ml-1">(avec Earn-out)</span>}
+                                </label>
                                 <FormattedNumberInput
                                     value={exitValuation}
                                     onChange={onExitValuationChange}
                                     className="flex h-10 w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all duration-200"
                                 />
                             </div>
+
+                            {/* Earn-out Decomposition */}
+                            {earnoutEnabled && earnoutUpfront > 0 && (
+                                <div className="bg-gradient-to-br from-purple-50 to-blue-50 border border-purple-200 rounded-lg p-4">
+                                    <div className="flex items-center gap-2 mb-3">
+                                        <Layers className="w-4 h-4 text-purple-600" />
+                                        <span className="font-medium text-purple-800 text-sm">Décomposition Earn-out</span>
+                                    </div>
+
+                                    <div className="space-y-2">
+                                        {/* Visual bar */}
+                                        <div className="flex h-4 rounded-full overflow-hidden border border-purple-200">
+                                            <div
+                                                className="bg-blue-500 flex items-center justify-center"
+                                                style={{ width: `${(earnoutUpfront / exitValuation) * 100}%` }}
+                                            >
+                                                <span className="text-[9px] font-bold text-white">
+                                                    {Math.round((earnoutUpfront / exitValuation) * 100)}%
+                                                </span>
+                                            </div>
+                                            <div
+                                                className="bg-purple-400 flex items-center justify-center"
+                                                style={{ width: `${(earnoutMax / exitValuation) * 100}%` }}
+                                            >
+                                                <span className="text-[9px] font-bold text-white">
+                                                    {Math.round((earnoutMax / exitValuation) * 100)}%
+                                                </span>
+                                            </div>
+                                        </div>
+
+                                        {/* Legend */}
+                                        <div className="grid grid-cols-2 gap-2 text-xs">
+                                            <div className="flex items-center gap-2 bg-white rounded p-2">
+                                                <div className="w-3 h-3 rounded bg-blue-500"></div>
+                                                <div>
+                                                    <div className="font-medium text-slate-700">Upfront</div>
+                                                    <div className="text-slate-500">{formatCurrency(earnoutUpfront)}</div>
+                                                </div>
+                                            </div>
+                                            <div className="flex items-center gap-2 bg-white rounded p-2">
+                                                <div className="w-3 h-3 rounded bg-purple-400"></div>
+                                                <div>
+                                                    <div className="font-medium text-slate-700">Earn-out Max</div>
+                                                    <div className="text-slate-500">{formatCurrency(earnoutMax)}</div>
+                                                </div>
+                                            </div>
+                                        </div>
+
+                                        <p className="text-[11px] text-purple-700 mt-2 italic">
+                                            ⓘ Le waterfall ci-dessous simule la distribution de l'<strong>Upfront</strong> ({formatCurrency(earnoutUpfront)}).
+                                            L'Earn-out sera distribué selon les termes configurés dans l'onglet Earn-out.
+                                        </p>
+                                    </div>
+                                </div>
+                            )}
                         </div>
                     </div>
 
@@ -327,35 +391,44 @@ export const WaterfallView: React.FC<WaterfallViewProps> = ({
                                         {hasPrefPayouts && <th className="px-2 py-2 text-right whitespace-nowrap">Preference</th>}
                                         <th className="px-2 py-2 text-right whitespace-nowrap">Participation</th>
                                         <th className="px-2 py-2 text-right whitespace-nowrap">Total Payout</th>
+                                        <th className="px-2 py-2 text-right whitespace-nowrap">% of Proceeds</th>
                                         <th className="px-2 py-2 text-right whitespace-nowrap">Multiple</th>
                                     </tr>
                                 </thead>
                                 <tbody className="divide-y divide-slate-100">
-                                    {payouts.map((p) => (
-                                        <tr key={p.shareholderId} className="hover:bg-slate-50 transition-colors">
-                                            <td className="px-2 py-2 font-medium text-slate-900">{p.shareholderName}</td>
-                                            <td className="px-2 py-2 text-right text-slate-500 whitespace-nowrap">{formatCurrency(p.totalInvested)}</td>
-                                            {carveOutPercent > 0 && (
+                                    {payouts.map((p) => {
+                                        const totalProceeds = payouts.reduce((sum, payout) => sum + payout.totalPayout, 0);
+                                        const percentOfProceeds = totalProceeds > 0 ? (p.totalPayout / totalProceeds) * 100 : 0;
+
+                                        return (
+                                            <tr key={p.shareholderId} className="hover:bg-slate-50 transition-colors">
+                                                <td className="px-2 py-2 font-medium text-slate-900">{p.shareholderName}</td>
+                                                <td className="px-2 py-2 text-right text-slate-500 whitespace-nowrap">{formatCurrency(p.totalInvested)}</td>
+                                                {carveOutPercent > 0 && (
+                                                    <td className="px-2 py-2 text-right text-slate-600 font-mono whitespace-nowrap">
+                                                        {p.carveOutPayout > 0 ? formatCurrency(p.carveOutPayout) : '-'}
+                                                    </td>
+                                                )}
+                                                {hasPrefPayouts && (
+                                                    <td className="px-2 py-2 text-right text-slate-600 font-mono whitespace-nowrap">
+                                                        {p.preferencePayout > 0 ? formatCurrency(p.preferencePayout) : '-'}
+                                                    </td>
+                                                )}
                                                 <td className="px-2 py-2 text-right text-slate-600 font-mono whitespace-nowrap">
-                                                    {p.carveOutPayout > 0 ? formatCurrency(p.carveOutPayout) : '-'}
+                                                    {p.participationPayout > 0 ? formatCurrency(p.participationPayout) : '-'}
                                                 </td>
-                                            )}
-                                            {hasPrefPayouts && (
-                                                <td className="px-2 py-2 text-right text-slate-600 font-mono whitespace-nowrap">
-                                                    {p.preferencePayout > 0 ? formatCurrency(p.preferencePayout) : '-'}
+                                                <td className="px-2 py-2 text-right font-bold text-slate-900 bg-blue-50/30 whitespace-nowrap">
+                                                    {formatCurrency(p.totalPayout)}
                                                 </td>
-                                            )}
-                                            <td className="px-2 py-2 text-right text-slate-600 font-mono whitespace-nowrap">
-                                                {p.participationPayout > 0 ? formatCurrency(p.participationPayout) : '-'}
-                                            </td>
-                                            <td className="px-2 py-2 text-right font-bold text-slate-900 bg-blue-50/30 whitespace-nowrap">
-                                                {formatCurrency(p.totalPayout)}
-                                            </td>
-                                            <td className={`px-2 py-2 text-right font-bold whitespace-nowrap ${p.multiple >= 1 ? 'text-green-600' : 'text-red-500'}`}>
-                                                {p.multiple.toFixed(2)}x
-                                            </td>
-                                        </tr>
-                                    ))}
+                                                <td className="px-2 py-2 text-right font-bold text-purple-600 whitespace-nowrap">
+                                                    {percentOfProceeds.toFixed(2)}%
+                                                </td>
+                                                <td className={`px-2 py-2 text-right font-bold whitespace-nowrap ${p.multiple >= 1 ? 'text-green-600' : 'text-red-500'}`}>
+                                                    {p.multiple.toFixed(2)}x
+                                                </td>
+                                            </tr>
+                                        );
+                                    })}
                                     <tr className="bg-slate-900 text-white font-bold">
                                         <td className="px-2 py-2">TOTAL</td>
                                         <td className="px-2 py-2 text-right whitespace-nowrap">
@@ -376,6 +449,9 @@ export const WaterfallView: React.FC<WaterfallViewProps> = ({
                                         </td>
                                         <td className="px-2 py-2 text-right text-white whitespace-nowrap">
                                             {formatCurrency(payouts.reduce((sum, p) => sum + p.totalPayout, 0))}
+                                        </td>
+                                        <td className="px-2 py-2 text-right text-purple-300 whitespace-nowrap">
+                                            100.00%
                                         </td>
                                         <td className="px-2 py-2 text-right whitespace-nowrap">
                                             {(payouts.reduce((sum, p) => sum + p.totalPayout, 0) / payouts.reduce((sum, p) => sum + p.totalInvested, 0)).toFixed(2)}x

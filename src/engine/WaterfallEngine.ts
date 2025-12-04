@@ -471,7 +471,8 @@ export const calculateWaterfall = (
             if (!nonParticipatingClasses.has(className) && !participatedClasses.has(className)) {
                 summary.forEach(s => {
                     if (className === 'Ordinary') {
-                        classShares += s.totalOptions;
+                        // Include BOTH actual Ordinary shares AND options
+                        classShares += (s.sharesByClass[className] || 0) + s.totalOptions;
                     } else {
                         classShares += s.sharesByClass[className] || 0;
                     }
@@ -497,7 +498,8 @@ export const calculateWaterfall = (
                 summary.forEach(s => {
                     let sShares = 0;
                     if (className === 'Ordinary') {
-                        sShares = s.totalOptions;
+                        // Include BOTH actual Ordinary shares AND options
+                        sShares = (s.sharesByClass[className] || 0) + s.totalOptions;
                     } else {
                         sShares = s.sharesByClass[className] || 0;
                     }

@@ -158,11 +158,148 @@ export interface WaterfallResult {
     payouts: WaterfallPayout[];
 }
 
+export type Currency = 'EUR' | 'USD' | 'GBP' | 'CHF';
+
+export interface EarnoutGeneralParams {
+    enterpriseValue: number;
+    currency: Currency;
+    upfrontPayment: number;
+    upfrontMode: 'amount' | 'percent'; // Toggle between amount and percentage
+    earnoutMax: number;
+    earnoutMode: 'amount' | 'percent'; // Toggle between amount and percentage
+    closingDate: string; // ISO date string
+    duration: number; // in months
+    customDuration?: number; // for custom duration
+    endDate: string; // Auto-calculated ISO date string
+    beneficiaryScope: 'all' | 'founders-only';
+}
+
+export type PaymentStructureType = 'binary' | 'progressive' | 'multi-milestones' | 'acceleration';
+export type InterpolationType = 'linear' | 'steps' | 'exponential';
+export type AccelerationTrigger = 'secondary-exit' | 'ipo' | 'change-of-control' | 'breach';
+
+export interface BinaryMilestone {
+    name: string;
+    date: string;
+    condition: string;
+    targetValue: number;
+}
+
+export interface ProgressiveStructure {
+    floor: number; // minimum value
+    cap: number; // maximum value
+    interpolation: InterpolationType;
+}
+
+export interface MultiMilestone {
+    id: string;
+    name: string;
+    date: string;
+    condition: string;
+    targetValue: number;
+    earnoutPercent: number; // % of total earn-out
+}
+
+export interface AccelerationTriggerConfig {
+    trigger: AccelerationTrigger;
+    accelerationPercent: number; // 0-100%
+    paymentDelay: number; // in days
+}
+
+export interface PaymentStructure {
+    type: PaymentStructureType;
+    binary?: BinaryMilestone;
+    progressive?: ProgressiveStructure;
+    multiMilestones?: {
+        milestones: MultiMilestone[];
+        isCumulative: boolean;
+    };
+    acceleration?: AccelerationTriggerConfig[];
+}
+
+export type AllocationMethod = 'pro-rata' | 'carve-out' | 'custom';
+export type LeaverRule = 'total-loss' | 'prorata' | 'retention';
+
+export interface LeaverRules {
+    badLeaver: LeaverRule;
+    goodLeaver: LeaverRule;
+}
+
+export interface CarveOutGroup {
+    id: string;
+    name: string;
+    allocationMode: 'amount' | 'percent';
+    value: number;
+}
+
+export interface CustomAllocation {
+    shareholderId: string;
+    allocationPercent: number;
+}
+
+export interface BeneficiariesConfig {
+    method: AllocationMethod;
+    carveOutGroups: CarveOutGroup[];
+    customAllocations: CustomAllocation[];
+    leaverRules: {
+        founders: LeaverRules;
+        employees: LeaverRules;
+        advisors: LeaverRules;
+    };
+}
+
+export interface EscrowClause {
+    enabled: boolean;
+    percentage: number;
+    duration: number; // months
+}
+
+export interface ClawbackClause {
+    enabled: boolean;
+}
+
+export interface FloorClause {
+    enabled: boolean;
+    value: number;
+}
+
+export interface CapClause {
+    enabled: boolean;
+    value: number;
+}
+
+export interface TaxRates {
+    founders: number;
+    employees: number;
+    investors: number;
+}
+
+export interface ClausesConfig {
+    escrow: EscrowClause;
+    clawback: ClawbackClause;
+    guaranteedFloor: FloorClause;
+    individualCap: CapClause;
+    taxRates: TaxRates;
+}
+
+export interface MilestoneAchievement {
+    milestoneId: string;
+    achievementPercent: number; // 0-150%
+}
+
+export type LiquidationPreferenceMode = 'upfront-only' | 'total-proceeds';
+
+export interface SimulationConfig {
+    milestoneAchievements: MilestoneAchievement[];
+    globalAchievementPercent: number; // For binary/progressive: 0-150%
+    liquidationPreferenceMode: LiquidationPreferenceMode;
+}
+
 export interface EarnoutConfig {
     enabled: boolean;
-    generalParams: any;
-    paymentStructure: any;
-    beneficiaries: any;
-    clauses: any;
-    simulation: any;
+    generalParams: EarnoutGeneralParams;
+    paymentStructure: PaymentStructure;
+    beneficiaries: BeneficiariesConfig;
+    clauses: ClausesConfig;
+    simulation: SimulationConfig;
 }

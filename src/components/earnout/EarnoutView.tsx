@@ -1,33 +1,132 @@
 import { useState } from 'react';
-import type { EarnoutConfig } from '../../engine/types';
+import type { EarnoutConfig, Shareholder, CapTableSummaryItem } from '../../engine/types';
 import { ChevronDown, ChevronRight } from 'lucide-react';
+import { GeneralParams } from './GeneralParams';
+import { PaymentStructureComponent } from './PaymentStructure';
+import { Beneficiaries } from './Beneficiaries';
+import { Clauses } from './Clauses';
+import { Simulation } from './Simulation';
 
 interface EarnoutViewProps {
     config: EarnoutConfig;
     onChange: (newConfig: EarnoutConfig) => void;
+    shareholders: Shareholder[];
+    capTableSummary: CapTableSummaryItem[];
 }
 
-export function EarnoutView({ config, onChange }: EarnoutViewProps) {
-    // Temporary usage to avoid lint errors
-    // In a real implementation, we would use config and onChange to render/update the form
-    const _config = config;
-    const _onChange = onChange;
-
+export function EarnoutView({ config, onChange, shareholders, capTableSummary }: EarnoutViewProps) {
     const [openSection, setOpenSection] = useState<string | null>('params');
 
-    // Mock progress calculation
-    const progress = 0; // To be implemented properly later
+    // Calculate progress based on filled fields
+    const calculateProgress = () => {
+        let filledSections = 0;
+        const totalSections = 5;
+
+        // Check if general params are filled
+        if (config.generalParams.enterpriseValue > 0 && config.generalParams.closingDate) {
+            filledSections++;
+        }
+
+        // Check if payment structure is configured
+        if (config.paymentStructure.type) {
+            filledSections++;
+        }
+
+        // Check if beneficiaries are configured (always true as it has defaults)
+        filledSections++;
+
+        // Check if clauses are configured (always true as it has defaults)
+        filledSections++;
+
+        return Math.round((filledSections / totalSections) * 100);
+    };
+
+    const progress = calculateProgress();
+
+    const CURRENCY_SYMBOLS: Record<string, string> = {
+        EUR: '€',
+        USD: '$',
+        GBP: '£',
+        CHF: 'CHF'
+    };
+
+    const currencySymbol = CURRENCY_SYMBOLS[config.generalParams.currency] || '€';
+
+    const formatCurrency = (value: number) => {
+        return new Intl.NumberFormat('fr-FR', {
+            minimumFractionDigits: 0,
+            maximumFractionDigits: 0
+        }).format(value) + ' ' + currencySymbol;
+    };
 
     const sections = [
-        { id: 'params', title: 'Paramètres' },
-        { id: 'payment', title: 'Versement' },
-        { id: 'beneficiaries', title: 'Bénéficiaires' },
-        { id: 'clauses', title: 'Clauses' },
-        { id: 'simulation', title: 'Simulation' },
+        { id: 'params', title: 'Paramètres', component: GeneralParams },
+        { id: 'payment', title: 'Versement', component: PaymentStructureComponent },
+        { id: 'beneficiaries', title: 'Bénéficiaires', component: Beneficiaries },
+        { id: 'clauses', title: 'Clauses', component: Clauses },
+        { id: 'simulation', title: 'Simulation', component: Simulation },
     ];
 
     const toggleSection = (id: string) => {
         setOpenSection(openSection === id ? null : id);
+    };
+
+    const getSectionSummary = (sectionId: string) => {
+        if (openSection === sectionId) return null;
+
+        switch (sectionId) {
+            case 'params':
+                return (
+                    <div className="text-sm text-slate-500 mt-1">
+                        {config.generalParams.enterpriseValue > 0 ? (
+                            <>
+                                EV: <span className="font-medium text-slate-700">{formatCurrency(config.generalParams.enterpriseValue)}</span> •
+                                Durée: <span className="font-medium text-slate-700">{config.generalParams.duration} mois</span>
+                            </>
+                        ) : 'Non configuré'}
+                    </div>
+                );
+            case 'payment':
+                const typeLabels: Record<string, string> = {
+                    'binary': 'Binaire',
+                    'progressive': 'Progressif',
+                    'multi-milestones': 'Multi-milestones',
+                    'acceleration': 'Accélération'
+                };
+                return (
+                    <div className="text-sm text-slate-500 mt-1">
+                        Type: <span className="font-medium text-slate-700">{typeLabels[config.paymentStructure.type]}</span>
+                    </div>
+                );
+            case 'beneficiaries':
+                const methodLabels: Record<string, string> = {
+                    'pro-rata': 'Pro-rata',
+                    'carve-out': 'Carve-out',
+                    'custom': 'Custom'
+                };
+                return (
+                    <div className="text-sm text-slate-500 mt-1">
+                        Méthode: <span className="font-medium text-slate-700">{methodLabels[config.beneficiaries.method]}</span> •
+                        Scope: <span className="font-medium text-slate-700">{config.generalParams.beneficiaryScope === 'founders-only' ? 'Fondateurs' : 'Tous'}</span>
+                    </div>
+                );
+            case 'clauses':
+                const activeClauses = [];
+                if (config.clauses.escrow.enabled) activeClauses.push('Escrow');
+                if (config.clauses.clawback.enabled) activeClauses.push('Clawback');
+                if (config.clauses.guaranteedFloor.enabled) activeClauses.push('Floor');
+                if (config.clauses.individualCap.enabled) activeClauses.push('Cap');
+
+                return (
+                    <div className="text-sm text-slate-500 mt-1">
+                        {activeClauses.length > 0 ? (
+                            <>Clauses: <span className="font-medium text-slate-700">{activeClauses.join(', ')}</span></>
+                        ) : 'Aucune clause active'}
+                    </div>
+                );
+            default:
+                return null;
+        }
     };
 
     return (
@@ -47,7 +146,9 @@ export function EarnoutView({ config, onChange }: EarnoutViewProps) {
             <div className="bg-white p-6 rounded-xl border border-slate-200 shadow-sm">
                 <div className="flex justify-between items-center mb-3">
                     <h3 className="font-semibold text-slate-700">Configuration à {progress}%</h3>
-                    <span className="text-xs font-medium text-slate-500 bg-slate-100 px-2 py-1 rounded-full">Étape 1/5</span>
+                    <span className="text-xs font-medium text-slate-500 bg-slate-100 px-2 py-1 rounded-full">
+                        Étape {sections.findIndex(s => s.id === openSection) + 1}/5
+                    </span>
                 </div>
                 <div className="w-full bg-slate-100 rounded-full h-2.5 overflow-hidden">
                     <div
@@ -72,16 +173,50 @@ export function EarnoutView({ config, onChange }: EarnoutViewProps) {
                                 </div>
                                 <div>
                                     <span className="font-semibold text-slate-800 block">{section.title}</span>
-                                    <span className="text-xs text-slate-500">Section {index + 1}</span>
+                                    {getSectionSummary(section.id) || <span className="text-xs text-slate-500">Section {index + 1}</span>}
                                 </div>
                             </div>
                         </button>
 
                         {openSection === section.id && (
                             <div className="p-6 border-t border-slate-100 bg-slate-50/50">
-                                <div className="flex flex-col items-center justify-center py-8 text-slate-400 border-2 border-dashed border-slate-200 rounded-lg">
-                                    <p className="italic">Configuration pour {section.title} (À venir)</p>
-                                </div>
+                                {section.id === 'params' ? (
+                                    <GeneralParams
+                                        params={config.generalParams}
+                                        onChange={(newParams) => onChange({ ...config, generalParams: newParams })}
+                                    />
+                                ) : section.id === 'payment' ? (
+                                    <PaymentStructureComponent
+                                        structure={config.paymentStructure}
+                                        onChange={(newStructure) => onChange({ ...config, paymentStructure: newStructure })}
+                                        earnoutMax={config.generalParams.earnoutMax}
+                                        currency={currencySymbol}
+                                    />
+                                ) : section.id === 'beneficiaries' ? (
+                                    <Beneficiaries
+                                        config={config.beneficiaries}
+                                        onChange={(newBeneficiaries) => onChange({ ...config, beneficiaries: newBeneficiaries })}
+                                        shareholders={shareholders}
+                                        earnoutMax={config.generalParams.earnoutMax}
+                                        currency={currencySymbol}
+                                        beneficiaryScope={config.generalParams.beneficiaryScope}
+                                    />
+                                ) : section.id === 'clauses' ? (
+                                    <Clauses
+                                        config={config.clauses}
+                                        onChange={(newClauses) => onChange({ ...config, clauses: newClauses })}
+                                        earnoutMax={config.generalParams.earnoutMax}
+                                        currency={currencySymbol}
+                                    />
+                                ) : section.id === 'simulation' ? (
+                                    <Simulation
+                                        config={config}
+                                        simulation={config.simulation}
+                                        onChange={(newSimulation) => onChange({ ...config, simulation: newSimulation })}
+                                        shareholders={shareholders}
+                                        capTableSummary={capTableSummary}
+                                    />
+                                ) : null}
                             </div>
                         )}
                     </div>

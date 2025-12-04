@@ -119,13 +119,88 @@ const initialCapTable: CapTable = {
 };
 
 const initialEarnoutConfig: EarnoutConfig = {
-  enabled: false,
-  generalParams: {},
-  paymentStructure: {},
-  beneficiaries: {},
-  clauses: {},
-  simulation: {}
+  enabled: true,
+  generalParams: {
+    enterpriseValue: 50000000, // 50M€ - 2x la dernière valorisation post-money (25M)
+    currency: 'EUR',
+    upfrontPayment: 35000000, // 35M€ upfront (70%)
+    upfrontMode: 'amount',
+    earnoutMax: 15000000, // 15M€ earn-out max (30%)
+    earnoutMode: 'amount',
+    closingDate: '2025-06-15', // Closing prévu mi-2025
+    duration: 24, // 24 mois d'earn-out
+    endDate: '2027-06-15', // Fin earn-out mi-2027
+    beneficiaryScope: 'all' // Tous les actionnaires
+  },
+  paymentStructure: {
+    type: 'multi-milestones',
+    multiMilestones: {
+      milestones: [
+        {
+          id: 'm1',
+          name: 'Q4 2025 Revenue Target',
+          date: '2025-12-31',
+          condition: 'ARR ≥ 5M€',
+          targetValue: 5000000,
+          earnoutPercent: 30 // 30% du earn-out = 4.5M€
+        },
+        {
+          id: 'm2',
+          name: 'Q2 2026 Revenue Target',
+          date: '2026-06-30',
+          condition: 'ARR ≥ 8M€',
+          targetValue: 8000000,
+          earnoutPercent: 40 // 40% du earn-out = 6M€
+        },
+        {
+          id: 'm3',
+          name: 'Q4 2026 Revenue Target',
+          date: '2026-12-31',
+          condition: 'ARR ≥ 12M€',
+          targetValue: 12000000,
+          earnoutPercent: 30 // 30% du earn-out = 4.5M€
+        }
+      ],
+      isCumulative: true
+    }
+  },
+  beneficiaries: {
+    method: 'carve-out',
+    carveOutGroups: [
+      { id: 'founders', name: 'Fondateurs', allocationMode: 'percent', value: 60 }, // 60% aux fondateurs
+      { id: 'management', name: 'Management', allocationMode: 'percent', value: 25 }, // 25% au management
+      { id: 'employees', name: 'Employés Clés', allocationMode: 'percent', value: 15 } // 15% aux employés clés
+    ],
+    customAllocations: [
+      { shareholderId: '1', allocationPercent: 35 }, // Alice Founder
+      { shareholderId: '2', allocationPercent: 25 }, // Bob Co-Founder
+      { shareholderId: '6', allocationPercent: 10 }, // Charlie Employee
+      { shareholderId: '7', allocationPercent: 10 }, // Dave Developer
+    ],
+    leaverRules: {
+      founders: { goodLeaver: 'prorata', badLeaver: 'total-loss' },
+      employees: { goodLeaver: 'prorata', badLeaver: 'total-loss' },
+      advisors: { goodLeaver: 'retention', badLeaver: 'total-loss' }
+    }
+  },
+  clauses: {
+    escrow: { enabled: true, percentage: 20, duration: 18 }, // 20% en escrow pendant 18 mois
+    clawback: { enabled: true },
+    guaranteedFloor: { enabled: true, value: 3000000 }, // Minimum 3M€ garanti
+    individualCap: { enabled: true, value: 5000000 }, // Cap individuel 5M€
+    taxRates: { founders: 30, employees: 45, investors: 30 } // Fiscalité estimée
+  },
+  simulation: {
+    milestoneAchievements: [
+      { milestoneId: 'm1', achievementPercent: 100 }, // M1 atteint
+      { milestoneId: 'm2', achievementPercent: 85 },  // M2 en cours (85%)
+      { milestoneId: 'm3', achievementPercent: 0 }    // M3 pas encore commencé
+    ],
+    globalAchievementPercent: 100,
+    liquidationPreferenceMode: 'upfront-only'
+  }
 };
+
 
 function App() {
   const [activeTab, setActiveTab] = useState<'captable' | 'waterfall' | 'earnout'>('captable');
@@ -139,7 +214,8 @@ function App() {
   const [carveOutPercent, setCarveOutPercent] = useState(0);
   const [carveOutBeneficiary, setCarveOutBeneficiary] = useState<CarveOutBeneficiary>('everyone');
 
-  const { postMoneyValuation } = calculateCapTableState(capTable);
+  const capTableState = calculateCapTableState(capTable);
+  const { postMoneyValuation, summary: capTableSummary } = capTableState;
 
   const [isResetModalOpen, setIsResetModalOpen] = useState(false);
   const [shareUrlCopied, setShareUrlCopied] = useState(false);
@@ -270,6 +346,43 @@ function App() {
       setCapTable(prev => ({ ...prev, rounds: updatedRounds }));
     }
   }, [preferences]); // Only depend on preferences, not rounds to avoid loop
+
+  // Sync exitValuation with earn-out EV when earn-out is enabled
+  useEffect(() => {
+    if (isLoadingFromPersistence) return;
+
+    if (earnoutConfig.enabled && earnoutConfig.generalParams.enterpriseValue > 0) {
+      // If earn-out is enabled, sync exitValuation with EV
+      if (exitValuation !== earnoutConfig.generalParams.enterpriseValue) {
+        setExitValuation(earnoutConfig.generalParams.enterpriseValue);
+      }
+    }
+  }, [earnoutConfig.enabled, earnoutConfig.generalParams.enterpriseValue, isLoadingFromPersistence]);
+
+  // Also sync EV when exitValuation changes (bidirectional sync)
+  useEffect(() => {
+    if (isLoadingFromPersistence) return;
+
+    if (earnoutConfig.enabled && exitValuation > 0) {
+      // If exitValuation changes and earn-out is enabled, update EV
+      if (exitValuation !== earnoutConfig.generalParams.enterpriseValue) {
+        setEarnoutConfig(prev => ({
+          ...prev,
+          generalParams: {
+            ...prev.generalParams,
+            enterpriseValue: exitValuation,
+            // Recalculate upfront and earnout based on percentages if in percent mode
+            upfrontPayment: prev.generalParams.upfrontMode === 'percent'
+              ? Math.round(exitValuation * (prev.generalParams.upfrontPayment / prev.generalParams.enterpriseValue))
+              : prev.generalParams.upfrontPayment,
+            earnoutMax: prev.generalParams.earnoutMode === 'percent'
+              ? Math.round(exitValuation * (prev.generalParams.earnoutMax / prev.generalParams.enterpriseValue))
+              : prev.generalParams.earnoutMax
+          }
+        }));
+      }
+    }
+  }, [exitValuation, earnoutConfig.enabled, isLoadingFromPersistence]);
 
   const handleExport = async () => {
     try {
@@ -616,11 +729,16 @@ function App() {
                 setCarveOutPercent={handleCarveOutPercentUpdate}
                 carveOutBeneficiary={carveOutBeneficiary}
                 setCarveOutBeneficiary={handleCarveOutBeneficiaryUpdate}
+                earnoutEnabled={earnoutConfig.enabled}
+                earnoutUpfront={earnoutConfig.generalParams.upfrontPayment}
+                earnoutMax={earnoutConfig.generalParams.earnoutMax}
               />
             ) : (
               <EarnoutView
                 config={earnoutConfig}
                 onChange={handleEarnoutConfigUpdate}
+                shareholders={capTable.shareholders}
+                capTableSummary={capTableSummary}
               />
             )}
           </div>
