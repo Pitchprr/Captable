@@ -1,4 +1,4 @@
-import { useState, useRef } from 'react';
+import { useState, useRef, useEffect } from 'react';
 import type { FocusEvent, ChangeEvent } from 'react';
 
 interface FormattedNumberInputProps {
@@ -47,7 +47,16 @@ export function FormattedNumberInput({
 
     const handleBlur = () => {
         setIsFocused(false);
-        const numValue = parseFormattedNumber(displayValue);
+        // Just reformat the display value based on current value
+        setDisplayValue(formatNumber(value));
+    };
+
+    const handleChange = (e: ChangeEvent<HTMLInputElement>) => {
+        const newDisplayValue = e.target.value;
+        setDisplayValue(newDisplayValue);
+
+        // Parse and call onChange immediately for real-time reactivity
+        const numValue = parseFormattedNumber(newDisplayValue);
 
         // Apply min/max constraints
         let finalValue = numValue;
@@ -55,17 +64,14 @@ export function FormattedNumberInput({
         if (max !== undefined && finalValue > max) finalValue = max;
 
         onChange(finalValue);
-        setDisplayValue(formatNumber(finalValue));
     };
 
-    const handleChange = (e: ChangeEvent<HTMLInputElement>) => {
-        setDisplayValue(e.target.value);
-    };
-
-    // Update display value when external value changes (but not when focused)
-    if (!isFocused && formatNumber(value) !== displayValue) {
-        setDisplayValue(formatNumber(value));
-    }
+    // Sync display value when external value changes (but not when focused)
+    useEffect(() => {
+        if (!isFocused) {
+            setDisplayValue(formatNumber(value));
+        }
+    }, [value, isFocused]);
 
     return (
         <input

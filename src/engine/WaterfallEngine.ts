@@ -117,6 +117,28 @@ export const calculateWaterfall = (
         return (shares / totalFullyDilutedShares) * effectiveProceeds;
     };
 
+    // Sort preferences by seniority (higher seniority = paid first)
+    const sortedPrefsForAnalysis = [...preferences].sort((a, b) => b.seniority - a.seniority);
+
+    // Calculate actual preference payouts considering seniority and available proceeds
+    let remainingForPrefAnalysis = effectiveProceeds;
+    const actualPrefPayouts = new Map<string, number>();
+
+    sortedPrefsForAnalysis.forEach(pref => {
+        const round = capTable.rounds.find(r => r.id === pref.roundId);
+        if (round) {
+            let prefClaim = 0;
+            round.investments.forEach(inv => {
+                prefClaim += inv.amount * pref.multiple;
+            });
+
+            // Actual payout is min of claim and remaining proceeds
+            const actualPayout = Math.min(prefClaim, remainingForPrefAnalysis);
+            actualPrefPayouts.set(round.shareClass, actualPayout);
+            remainingForPrefAnalysis = Math.max(0, remainingForPrefAnalysis - prefClaim);
+        }
+    });
+
     preferences.forEach(pref => {
         const round = capTable.rounds.find(r => r.id === pref.roundId);
         if (round) {
@@ -125,11 +147,14 @@ export const calculateWaterfall = (
                 classShares += s.sharesByClass[round.shareClass] || 0;
             });
 
-            // 1. Preference Value
+            // 1. Preference Value (theoretical claim)
             let prefClaim = 0;
             round.investments.forEach(inv => {
                 prefClaim += inv.amount * pref.multiple;
             });
+
+            // Get actual payout considering seniority
+            const actualPrefPayout = actualPrefPayouts.get(round.shareClass) || 0;
 
             // 2. Conversion Value
             const conversionValue = calculateAsConvertedValue(classShares);
@@ -138,13 +163,14 @@ export const calculateWaterfall = (
             let reason = '';
 
             if (pref.type === 'Non-Participating') {
-                if (conversionValue > prefClaim) {
+                // Compare ACTUAL preference payout (not claim) with conversion value
+                if (conversionValue > actualPrefPayout) {
                     decision = 'Convert to Ordinary';
-                    reason = `Conversion (${Math.round(conversionValue).toLocaleString()}€) > Preference (${Math.round(prefClaim).toLocaleString()}€)`;
+                    reason = `Conversion (${Math.round(conversionValue).toLocaleString()}€) > Preference (${Math.round(actualPrefPayout).toLocaleString()}€)`;
                     convertedClasses.add(round.shareClass);
                 } else {
                     decision = 'Keep Preference';
-                    reason = `Preference (${Math.round(prefClaim).toLocaleString()}€) > Conversion (${Math.round(conversionValue).toLocaleString()}€)`;
+                    reason = `Preference (${Math.round(actualPrefPayout).toLocaleString()}€) > Conversion (${Math.round(conversionValue).toLocaleString()}€)`;
                     nonParticipatingClasses.add(round.shareClass);
                     effectivePreferences.push(pref);
                 }
@@ -157,7 +183,7 @@ export const calculateWaterfall = (
             conversionAnalysis.push({
                 shareClass: round.shareClass,
                 totalShares: classShares,
-                valueAsPref: prefClaim,
+                valueAsPref: actualPrefPayout, // Show ACTUAL payout, not claim
                 valueAsConverted: conversionValue,
                 decision: decision,
                 reason: reason

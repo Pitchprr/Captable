@@ -10,6 +10,7 @@ import type {
 import { Plus, Trash2, TrendingUp } from 'lucide-react';
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
 import { FormattedNumberInput } from '../ui/FormattedNumberInput';
+import { COLORS } from '../../theme';
 
 interface PaymentStructureProps {
     structure: PaymentStructure;
@@ -364,7 +365,7 @@ export function PaymentStructureComponent({ structure, onChange, earnoutMax, cur
                                         formatter={(value: number) => [`${value.toFixed(1)}%`, 'Earn-out']}
                                         labelFormatter={(val) => `Valeur: ${Number(val).toLocaleString()} ${currency}`}
                                     />
-                                    <Line type="monotone" dataKey="earnout" stroke="#9333ea" strokeWidth={2} dot={false} />
+                                    <Line type="monotone" dataKey="earnout" stroke={COLORS.info} strokeWidth={2} dot={false} />
                                 </LineChart>
                             </ResponsiveContainer>
                         </div>

@@ -21,6 +21,7 @@ import {
     BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer,
     LineChart, Line, PieChart, Pie, Cell
 } from 'recharts';
+import { CHART_COLORS, COLORS } from '../../theme';
 
 interface SimulationProps {
     config: EarnoutConfig;
@@ -29,8 +30,6 @@ interface SimulationProps {
     shareholders: Shareholder[];
     capTableSummary: CapTableSummaryItem[];
 }
-
-const COLORS = ['#3B82F6', '#8B5CF6', '#10B981', '#F59E0B', '#EF4444', '#6366F1', '#EC4899'];
 
 export function Simulation({ config, simulation, onChange, shareholders, capTableSummary }: SimulationProps) {
     const { generalParams, paymentStructure, beneficiaries, clauses } = config;
@@ -262,9 +261,9 @@ export function Simulation({ config, simulation, onChange, shareholders, capTabl
 
     // Pie chart data for upfront vs earnout
     const pieData = useMemo(() => [
-        { name: 'Upfront', value: generalParams.upfrontPayment, color: '#3B82F6' },
-        { name: 'Earn-out (Scénario)', value: calculateEarnedAmount, color: '#8B5CF6' },
-        { name: 'Earn-out (Non atteint)', value: Math.max(0, generalParams.earnoutMax - calculateEarnedAmount), color: '#E2E8F0' }
+        { name: 'Upfront', value: generalParams.upfrontPayment, color: COLORS.primary },
+        { name: 'Earn-out (Scénario)', value: calculateEarnedAmount, color: COLORS.info },
+        { name: 'Earn-out (Non atteint)', value: Math.max(0, generalParams.earnoutMax - calculateEarnedAmount), color: COLORS.neutralLight }
     ], [generalParams, calculateEarnedAmount]);
 
     // Waterfall chart data
@@ -914,16 +913,16 @@ export function Simulation({ config, simulation, onChange, shareholders, capTabl
                     </h3>
                     <ResponsiveContainer width="100%" height={300}>
                         <BarChart data={waterfallData}>
-                            <CartesianGrid strokeDasharray="3 3" stroke="#E2E8F0" />
+                            <CartesianGrid strokeDasharray="3 3" stroke={COLORS.neutralLight} />
                             <XAxis dataKey="name" tick={{ fontSize: 11 }} />
                             <YAxis tickFormatter={(v) => `${(v / 1000000).toFixed(1)}M`} tick={{ fontSize: 11 }} />
                             <Tooltip
                                 formatter={(value: number) => [`${formatCurrency(value)} ${currencySymbol}`, '']}
-                                contentStyle={{ borderRadius: '8px', border: '1px solid #E2E8F0' }}
+                                contentStyle={{ borderRadius: '8px', border: `1px solid ${COLORS.neutralLight}` }}
                             />
                             <Legend />
-                            <Bar dataKey="upfront" stackId="a" fill="#3B82F6" name="Upfront" />
-                            <Bar dataKey="earnout" stackId="a" fill="#8B5CF6" name="Earn-out" />
+                            <Bar dataKey="upfront" stackId="a" fill={COLORS.primary} name="Upfront" />
+                            <Bar dataKey="earnout" stackId="a" fill={COLORS.info} name="Earn-out" />
                         </BarChart>
                     </ResponsiveContainer>
                 </div>
@@ -936,17 +935,17 @@ export function Simulation({ config, simulation, onChange, shareholders, capTabl
                     </h3>
                     <ResponsiveContainer width="100%" height={300}>
                         <LineChart data={sensitivityData}>
-                            <CartesianGrid strokeDasharray="3 3" stroke="#E2E8F0" />
+                            <CartesianGrid strokeDasharray="3 3" stroke={COLORS.neutralLight} />
                             <XAxis dataKey="achievement" tick={{ fontSize: 11 }} tickFormatter={(v) => `${v}%`} />
                             <YAxis tickFormatter={(v) => `${(v / 1000000).toFixed(1)}M`} tick={{ fontSize: 11 }} />
                             <Tooltip
                                 formatter={(value: number) => [`${formatCurrency(value)} ${currencySymbol}`, '']}
                                 labelFormatter={(label) => `Atteinte: ${label}%`}
-                                contentStyle={{ borderRadius: '8px', border: '1px solid #E2E8F0' }}
+                                contentStyle={{ borderRadius: '8px', border: `1px solid ${COLORS.neutralLight}` }}
                             />
                             <Legend />
-                            <Line type="monotone" dataKey="earnout" stroke="#8B5CF6" strokeWidth={2} name="Earn-out" dot={false} />
-                            <Line type="monotone" dataKey="total" stroke="#10B981" strokeWidth={2} name="Total Proceeds" dot={false} />
+                            <Line type="monotone" dataKey="earnout" stroke={COLORS.info} strokeWidth={2} name="Earn-out" dot={false} />
+                            <Line type="monotone" dataKey="total" stroke={COLORS.success} strokeWidth={2} name="Total Proceeds" dot={false} />
                         </LineChart>
                     </ResponsiveContainer>
                 </div>
@@ -974,7 +973,7 @@ export function Simulation({ config, simulation, onChange, shareholders, capTabl
                             </Pie>
                             <Tooltip
                                 formatter={(value: number) => [`${formatCurrency(value)} ${currencySymbol}`, '']}
-                                contentStyle={{ borderRadius: '8px', border: '1px solid #E2E8F0' }}
+                                contentStyle={{ borderRadius: '8px', border: `1px solid ${COLORS.neutralLight}` }}
                             />
                         </PieChart>
                     </ResponsiveContainer>
@@ -1118,10 +1117,10 @@ export function Simulation({ config, simulation, onChange, shareholders, capTabl
 
                 {/* Summary banner */}
                 <div className={`mt-4 p-3 rounded-lg text-sm font-medium flex items-center gap-2 ${validations.filter(v => v.severity === 'error' && !v.valid).length > 0
-                        ? 'bg-red-100 text-red-800 border border-red-300'
-                        : validations.filter(v => v.severity === 'warning' && !v.valid).length > 0
-                            ? 'bg-amber-100 text-amber-800 border border-amber-300'
-                            : 'bg-green-100 text-green-800 border border-green-300'
+                    ? 'bg-red-100 text-red-800 border border-red-300'
+                    : validations.filter(v => v.severity === 'warning' && !v.valid).length > 0
+                        ? 'bg-amber-100 text-amber-800 border border-amber-300'
+                        : 'bg-green-100 text-green-800 border border-green-300'
                     }`}>
                     {validations.filter(v => v.severity === 'error' && !v.valid).length > 0 ? (
                         <>🚫 Transaction non conforme aux standards M&A européens - Corrections requises</>

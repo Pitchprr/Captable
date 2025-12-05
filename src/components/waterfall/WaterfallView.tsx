@@ -1,12 +1,13 @@
 import React, { useState, useMemo } from 'react';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip as RechartsTooltip, Legend, ResponsiveContainer } from 'recharts';
-import { Layers, CheckCircle2, X, HelpCircle } from 'lucide-react';
+import { Layers, CheckCircle2, X, HelpCircle, ChevronDown } from 'lucide-react';
 import type { CapTable, LiquidationPreference, CarveOutBeneficiary, PayoutStructure, WaterfallStep } from '../../engine/types';
 import { calculateWaterfall } from '../../engine/WaterfallEngine';
 import { formatCurrency } from '../../utils';
 import { Input } from '../ui/Input';
 import { FormattedNumberInput } from '../ui/FormattedNumberInput';
 import { PreferenceConfig } from './PreferenceConfig';
+import { WATERFALL_COLORS } from '../../theme';
 
 interface WaterfallViewProps {
     capTable: CapTable;
@@ -618,48 +619,175 @@ export const WaterfallView: React.FC<WaterfallViewProps> = ({
                 {/* Results Panel */}
                 <div className="lg:col-span-2 space-y-8">
 
-                    {/* Conversion Analysis Panel */}
+                    {/* Conversion Analysis Panel - Premium Redesign */}
                     {conversionAnalysis && conversionAnalysis.length > 0 && (
-                        <div className="bg-white p-6 rounded-xl border border-slate-200 shadow-sm">
-                            <h3 className="text-lg font-semibold text-slate-800 mb-4 flex items-center gap-2">
-                                <span className="text-xl">⚖️</span> Conversion Analysis (Non-Participating Preferred)
-                            </h3>
-                            <div className="overflow-x-auto">
-                                <table className="w-full text-sm text-left">
-                                    <thead className="bg-slate-50 text-slate-500 font-medium border-b border-slate-200">
-                                        <tr>
-                                            <th className="px-4 py-3">Share Class</th>
-                                            <th className="px-4 py-3 text-right">Value as Preference</th>
-                                            <th className="px-4 py-3 text-right">Value as Ordinary (Converted)</th>
-                                            <th className="px-4 py-3 text-center">Decision</th>
-                                            <th className="px-4 py-3">Reason</th>
-                                        </tr>
-                                    </thead>
-                                    <tbody className="divide-y divide-slate-100">
-                                        {conversionAnalysis.map((analysis) => (
-                                            <tr key={analysis.shareClass} className="hover:bg-slate-50">
-                                                <td className="px-4 py-3 font-medium text-slate-900">{analysis.shareClass}</td>
-                                                <td className="px-4 py-3 text-right font-mono text-slate-600">
-                                                    {formatCurrency(analysis.valueAsPref)}
-                                                </td>
-                                                <td className="px-4 py-3 text-right font-mono text-slate-600">
-                                                    {formatCurrency(analysis.valueAsConverted)}
-                                                </td>
-                                                <td className="px-4 py-3 text-center">
-                                                    <span className={`px-2 py-1 rounded-full text-xs font-bold border ${analysis.decision === 'Convert to Ordinary'
-                                                        ? 'bg-purple-100 text-purple-700 border-purple-200'
-                                                        : 'bg-blue-100 text-blue-700 border-blue-200'
+                        <div className="bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900 p-6 rounded-2xl shadow-xl border border-slate-700/50 overflow-hidden relative">
+                            {/* Background Pattern */}
+                            <div className="absolute inset-0 opacity-5">
+                                <div className="absolute inset-0" style={{
+                                    backgroundImage: `url("data:image/svg+xml,%3Csvg width='60' height='60' viewBox='0 0 60 60' xmlns='http://www.w3.org/2000/svg'%3E%3Cg fill='none' fill-rule='evenodd'%3E%3Cg fill='%23ffffff' fill-opacity='1'%3E%3Cpath d='M36 34v-4h-2v4h-4v2h4v4h2v-4h4v-2h-4zm0-30V0h-2v4h-4v2h4v4h2V6h4V4h-4zM6 34v-4H4v4H0v2h4v4h2v-4h4v-2H6zM6 4V0H4v4H0v2h4v4h2V6h4V4H6z'/%3E%3C/g%3E%3C/g%3E%3C/svg%3E")`,
+                                }} />
+                            </div>
+
+                            {/* Header */}
+                            <div className="relative flex items-center justify-between mb-6">
+                                <div className="flex items-center gap-3">
+                                    <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-amber-400 to-orange-500 flex items-center justify-center shadow-lg shadow-orange-500/20">
+                                        <span className="text-2xl">⚖️</span>
+                                    </div>
+                                    <div>
+                                        <h3 className="text-xl font-bold text-white">Conversion Analysis</h3>
+                                        <p className="text-slate-400 text-sm">Non-Participating Preferred Decision Matrix</p>
+                                    </div>
+                                </div>
+                                <div className="hidden sm:flex items-center gap-2 px-3 py-1.5 rounded-full bg-slate-700/50 border border-slate-600">
+                                    <div className="w-2 h-2 rounded-full bg-green-400 animate-pulse"></div>
+                                    <span className="text-xs text-slate-300 font-medium">Auto-calculated</span>
+                                </div>
+                            </div>
+
+                            {/* Cards Grid */}
+                            <div className="relative grid gap-4">
+                                {conversionAnalysis.map((analysis, index) => {
+                                    const isConversion = analysis.decision === 'Convert to Ordinary';
+                                    const difference = analysis.valueAsConverted - analysis.valueAsPref;
+                                    const percentGain = analysis.valueAsPref > 0
+                                        ? ((difference / analysis.valueAsPref) * 100)
+                                        : 0;
+
+                                    return (
+                                        <div
+                                            key={analysis.shareClass}
+                                            className={`relative rounded-xl p-5 border backdrop-blur-sm transition-all duration-300 hover:scale-[1.01] hover:shadow-lg ${isConversion
+                                                ? 'bg-gradient-to-r from-purple-500/10 via-purple-500/5 to-transparent border-purple-500/30 hover:border-purple-400/50'
+                                                : 'bg-gradient-to-r from-blue-500/10 via-blue-500/5 to-transparent border-blue-500/30 hover:border-blue-400/50'
+                                                }`}
+                                            style={{ animationDelay: `${index * 100}ms` }}
+                                        >
+                                            {/* Share Class Badge */}
+                                            <div className="flex items-start justify-between mb-4">
+                                                <div className="flex items-center gap-3">
+                                                    <div className={`w-10 h-10 rounded-lg flex items-center justify-center font-bold text-lg shadow-lg ${isConversion
+                                                        ? 'bg-gradient-to-br from-purple-500 to-purple-600 text-white shadow-purple-500/30'
+                                                        : 'bg-gradient-to-br from-blue-500 to-blue-600 text-white shadow-blue-500/30'
                                                         }`}>
-                                                        {analysis.decision}
+                                                        {analysis.shareClass}
+                                                    </div>
+                                                    <div>
+                                                        <span className="text-white font-semibold text-base">{analysis.shareClass} Shares</span>
+                                                        <p className="text-slate-400 text-xs mt-0.5">{analysis.totalShares?.toLocaleString() || 0} shares</p>
+                                                    </div>
+                                                </div>
+
+                                                {/* Decision Badge */}
+                                                <div className={`flex items-center gap-2 px-4 py-2 rounded-full font-bold text-sm shadow-lg transition-transform hover:scale-105 ${isConversion
+                                                    ? 'bg-gradient-to-r from-purple-500 to-purple-600 text-white shadow-purple-500/30'
+                                                    : 'bg-gradient-to-r from-blue-500 to-blue-600 text-white shadow-blue-500/30'
+                                                    }`}>
+                                                    <span>{isConversion ? '🔄' : '🛡️'}</span>
+                                                    <span className="hidden sm:inline">{analysis.decision}</span>
+                                                    <span className="sm:hidden">{isConversion ? 'Convert' : 'Keep'}</span>
+                                                </div>
+                                            </div>
+
+                                            {/* Comparison Cards */}
+                                            <div className="grid sm:grid-cols-2 gap-3 mb-4">
+                                                {/* Value as Preference */}
+                                                <div className={`relative rounded-lg p-4 border ${!isConversion
+                                                    ? 'bg-blue-500/10 border-blue-400/30'
+                                                    : 'bg-slate-700/30 border-slate-600/30'
+                                                    }`}>
+                                                    {!isConversion && (
+                                                        <div className="absolute -top-2 -right-2">
+                                                            <span className="bg-blue-500 text-white text-[10px] font-bold px-2 py-0.5 rounded-full shadow-lg">
+                                                                ✓ CHOSEN
+                                                            </span>
+                                                        </div>
+                                                    )}
+                                                    <div className="flex items-center gap-2 mb-2">
+                                                        <span className="text-lg">🛡️</span>
+                                                        <span className="text-slate-300 text-sm font-medium">Value as Preference</span>
+                                                    </div>
+                                                    <div className={`font-mono text-xl font-bold ${!isConversion ? 'text-blue-400' : 'text-slate-400'}`}>
+                                                        {formatCurrency(analysis.valueAsPref)}
+                                                    </div>
+                                                </div>
+
+                                                {/* Value as Converted */}
+                                                <div className={`relative rounded-lg p-4 border ${isConversion
+                                                    ? 'bg-purple-500/10 border-purple-400/30'
+                                                    : 'bg-slate-700/30 border-slate-600/30'
+                                                    }`}>
+                                                    {isConversion && (
+                                                        <div className="absolute -top-2 -right-2">
+                                                            <span className="bg-purple-500 text-white text-[10px] font-bold px-2 py-0.5 rounded-full shadow-lg">
+                                                                ✓ CHOSEN
+                                                            </span>
+                                                        </div>
+                                                    )}
+                                                    <div className="flex items-center gap-2 mb-2">
+                                                        <span className="text-lg">🔄</span>
+                                                        <span className="text-slate-300 text-sm font-medium">Value as Ordinary</span>
+                                                    </div>
+                                                    <div className={`font-mono text-xl font-bold ${isConversion ? 'text-purple-400' : 'text-slate-400'}`}>
+                                                        {formatCurrency(analysis.valueAsConverted)}
+                                                    </div>
+                                                </div>
+                                            </div>
+
+                                            {/* Difference Indicator & Reason */}
+                                            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pt-3 border-t border-slate-600/30">
+                                                {/* Gain/Loss Indicator */}
+                                                <div className={`flex items-center gap-2 px-3 py-1.5 rounded-lg ${difference > 0
+                                                    ? 'bg-green-500/20 border border-green-500/30'
+                                                    : difference < 0
+                                                        ? 'bg-red-500/20 border border-red-500/30'
+                                                        : 'bg-slate-600/20 border border-slate-500/30'
+                                                    }`}>
+                                                    <span className={`text-lg ${difference > 0 ? 'text-green-400' : difference < 0 ? 'text-red-400' : 'text-slate-400'}`}>
+                                                        {difference > 0 ? '📈' : difference < 0 ? '📉' : '➖'}
                                                     </span>
-                                                </td>
-                                                <td className="px-4 py-3 text-slate-500 italic text-xs">
-                                                    {analysis.reason}
-                                                </td>
-                                            </tr>
-                                        ))}
-                                    </tbody>
-                                </table>
+                                                    <div>
+                                                        <span className={`font-mono font-bold text-sm ${difference > 0 ? 'text-green-400' : difference < 0 ? 'text-red-400' : 'text-slate-400'
+                                                            }`}>
+                                                            {difference > 0 ? '+' : ''}{formatCurrency(difference)}
+                                                        </span>
+                                                        <span className={`ml-2 text-xs font-medium ${difference > 0 ? 'text-green-400/70' : difference < 0 ? 'text-red-400/70' : 'text-slate-500'
+                                                            }`}>
+                                                            ({percentGain > 0 ? '+' : ''}{percentGain.toFixed(1)}%)
+                                                        </span>
+                                                    </div>
+                                                </div>
+
+                                                {/* Reason */}
+                                                <div className="flex items-center gap-2 text-slate-400 text-sm max-w-md">
+                                                    <span className="text-amber-400">💡</span>
+                                                    <span className="italic">{analysis.reason}</span>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    );
+                                })}
+                            </div>
+
+                            {/* Summary Footer */}
+                            <div className="relative mt-6 pt-4 border-t border-slate-700/50">
+                                <div className="flex flex-wrap items-center justify-center gap-6 text-sm">
+                                    <div className="flex items-center gap-2">
+                                        <div className="w-3 h-3 rounded-full bg-gradient-to-r from-purple-500 to-purple-600"></div>
+                                        <span className="text-slate-400">Converting to Ordinary:</span>
+                                        <span className="text-white font-bold">
+                                            {conversionAnalysis.filter(a => a.decision === 'Convert to Ordinary').length}
+                                        </span>
+                                    </div>
+                                    <div className="flex items-center gap-2">
+                                        <div className="w-3 h-3 rounded-full bg-gradient-to-r from-blue-500 to-blue-600"></div>
+                                        <span className="text-slate-400">Keeping Preference:</span>
+                                        <span className="text-white font-bold">
+                                            {conversionAnalysis.filter(a => a.decision === 'Keep Preference').length}
+                                        </span>
+                                    </div>
+                                </div>
                             </div>
                         </div>
                     )}
@@ -724,9 +852,9 @@ export const WaterfallView: React.FC<WaterfallViewProps> = ({
                                         cursor={{ fill: '#f1f5f9' }}
                                     />
                                     <Legend />
-                                    <Bar dataKey="Participation" stackId="a" fill="#10b981" />
-                                    {hasPrefPayouts && <Bar dataKey="Preference" stackId="a" fill="#3b82f6" />}
-                                    {carveOutPercent > 0 && <Bar dataKey="CarveOut" stackId="a" fill="#f59e0b" name="Carve-Out" />}
+                                    <Bar dataKey="Participation" stackId="a" fill={WATERFALL_COLORS.participation} />
+                                    {hasPrefPayouts && <Bar dataKey="Preference" stackId="a" fill={WATERFALL_COLORS.preference} />}
+                                    {carveOutPercent > 0 && <Bar dataKey="CarveOut" stackId="a" fill={WATERFALL_COLORS.carveOut} name="Carve-Out" />}
                                 </BarChart>
                             </ResponsiveContainer>
                         </div>
@@ -825,132 +953,240 @@ export const WaterfallView: React.FC<WaterfallViewProps> = ({
                         </div>
                     </div>
 
-                    {/* Waterfall Steps */}
-                    <div className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
-                        <div className="px-6 py-4 border-b border-slate-200 bg-slate-50 flex items-center gap-2">
-                            <Layers className="w-5 h-5 text-slate-500" />
-                            <h3 className="text-lg font-semibold text-slate-800">Distribution Waterfall</h3>
+                    {/* Waterfall Steps - Premium Redesign */}
+                    <div className="bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900 rounded-2xl shadow-2xl border border-slate-700/50 overflow-hidden relative">
+                        {/* Animated Background */}
+                        <div className="absolute inset-0 overflow-hidden">
+                            <div className="absolute -top-1/2 -right-1/2 w-full h-full bg-gradient-to-br from-blue-500/10 via-transparent to-transparent rounded-full blur-3xl"></div>
+                            <div className="absolute -bottom-1/2 -left-1/2 w-full h-full bg-gradient-to-tr from-emerald-500/10 via-transparent to-transparent rounded-full blur-3xl"></div>
                         </div>
-                        <div className="p-4 bg-slate-50/50">
-                            <div className="relative">
-                                {/* Vertical Line */}
-                                <div className="absolute left-3 top-3 bottom-3 w-0.5 bg-slate-200" />
 
-                                <div className="space-y-2">
-                                    {steps.map((step, index) => {
-                                        const isTotal = step.isTotal;
-                                        return (
-                                            <React.Fragment key={index}>
-                                                <div
-                                                    className="relative flex gap-3 group cursor-pointer"
-                                                    onClick={() => !isTotal && step.details && setExpandedStep(expandedStep?.stepNumber === step.stepNumber ? null : step)}
-                                                >
-                                                    {/* Icon/Indicator */}
-                                                    <div className={`relative z-10 flex-none w-6 h-6 rounded-full flex items-center justify-center border-2 shadow-sm transition-colors ${isTotal
-                                                        ? 'bg-slate-900 border-slate-800 text-white'
-                                                        : step.isParticipating
-                                                            ? 'bg-purple-50 border-purple-500 text-purple-600 group-hover:bg-purple-100'
-                                                            : 'bg-white border-blue-500 text-blue-600 group-hover:bg-blue-50'
+                        {/* Header */}
+                        <div className="relative px-6 py-5 border-b border-slate-700/50 flex items-center justify-between">
+                            <div className="flex items-center gap-4">
+                                <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-blue-500 to-cyan-400 flex items-center justify-center shadow-lg shadow-blue-500/25">
+                                    <Layers className="w-6 h-6 text-white" />
+                                </div>
+                                <div>
+                                    <h3 className="text-xl font-bold text-white">Distribution Waterfall</h3>
+                                    <p className="text-slate-400 text-sm">Step-by-step proceeds allocation</p>
+                                </div>
+                            </div>
+                            <div className="hidden sm:flex items-center gap-3">
+                                <div className="flex items-center gap-2 px-3 py-1.5 rounded-full bg-emerald-500/20 border border-emerald-500/30">
+                                    <div className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></div>
+                                    <span className="text-xs text-emerald-300 font-medium">{steps.length} Steps</span>
+                                </div>
+                                <div className="px-3 py-1.5 rounded-full bg-slate-700/50 border border-slate-600">
+                                    <span className="text-xs text-slate-300 font-mono">{formatCurrency(exitValuation)} Exit</span>
+                                </div>
+                            </div>
+                        </div>
+
+                        {/* Waterfall Content */}
+                        <div className="relative p-6">
+                            {/* Progress Bar Background */}
+                            <div className="absolute left-10 top-8 bottom-8 w-1 bg-gradient-to-b from-blue-500/50 via-purple-500/50 to-emerald-500/50 rounded-full"></div>
+
+                            <div className="space-y-4">
+                                {steps.map((step, index) => {
+                                    const isTotal = step.isTotal;
+                                    const isExpanded = expandedStep?.stepNumber === step.stepNumber;
+                                    // Note: progressPercent could be used for a visual progress indicator
+
+                                    // Determine step type for styling
+                                    const getStepColor = () => {
+                                        if (isTotal) return { from: 'from-emerald-500', to: 'to-emerald-400', ring: 'ring-emerald-500/50', bg: 'bg-emerald-500', text: 'text-emerald-400' };
+                                        if (step.stepName?.toLowerCase().includes('carve')) return { from: 'from-amber-500', to: 'to-orange-400', ring: 'ring-amber-500/50', bg: 'bg-amber-500', text: 'text-amber-400' };
+                                        if (step.stepName?.toLowerCase().includes('pref') || step.stepName?.toLowerCase().includes('liqu')) return { from: 'from-blue-500', to: 'to-blue-400', ring: 'ring-blue-500/50', bg: 'bg-blue-500', text: 'text-blue-400' };
+                                        if (step.isParticipating) return { from: 'from-purple-500', to: 'to-purple-400', ring: 'ring-purple-500/50', bg: 'bg-purple-500', text: 'text-purple-400' };
+                                        return { from: 'from-cyan-500', to: 'to-cyan-400', ring: 'ring-cyan-500/50', bg: 'bg-cyan-500', text: 'text-cyan-400' };
+                                    };
+
+                                    const colors = getStepColor();
+
+                                    // Get icon for step type
+                                    const getStepIcon = () => {
+                                        if (isTotal) return '💰';
+                                        if (step.stepName?.toLowerCase().includes('carve')) return '🎁';
+                                        if (step.stepName?.toLowerCase().includes('pref') || step.stepName?.toLowerCase().includes('liqu')) return '🛡️';
+                                        if (step.isParticipating) return '📊';
+                                        return '💵';
+                                    };
+
+                                    return (
+                                        <React.Fragment key={index}>
+                                            <div
+                                                className={`relative flex gap-4 group ${!isTotal && step.details ? 'cursor-pointer' : ''}`}
+                                                onClick={() => !isTotal && step.details && setExpandedStep(isExpanded ? null : step)}
+                                            >
+                                                {/* Step Indicator */}
+                                                <div className="relative z-10 flex-none">
+                                                    <div className={`w-8 h-8 rounded-full flex items-center justify-center shadow-lg transition-all duration-300 ${isTotal
+                                                        ? `bg-gradient-to-br ${colors.from} ${colors.to} ring-4 ${colors.ring} scale-110`
+                                                        : isExpanded
+                                                            ? `bg-gradient-to-br ${colors.from} ${colors.to} ring-4 ${colors.ring}`
+                                                            : `bg-slate-800 border-2 border-slate-600 group-hover:border-slate-500 group-hover:bg-slate-700`
                                                         }`}>
                                                         {isTotal ? (
-                                                            <CheckCircle2 className="w-3 h-3" />
+                                                            <CheckCircle2 className="w-4 h-4 text-white" />
                                                         ) : (
-                                                            <span className="text-[10px] font-bold">{index + 1}</span>
+                                                            <span className={`text-sm font-bold transition-colors ${isExpanded ? 'text-white' : 'text-slate-400 group-hover:text-slate-300'}`}>
+                                                                {index + 1}
+                                                            </span>
                                                         )}
                                                     </div>
+                                                    {/* Glow effect for total */}
+                                                    {isTotal && (
+                                                        <div className={`absolute inset-0 rounded-full ${colors.bg} blur-md opacity-50 animate-pulse`}></div>
+                                                    )}
+                                                </div>
 
-                                                    {/* Content Card */}
-                                                    <div className={`flex-1 rounded-lg border px-3 py-2 transition-all hover:shadow-md ${isTotal
-                                                        ? 'bg-slate-900 border-slate-800 text-white shadow-md'
-                                                        : step.isParticipating
-                                                            ? 'bg-purple-50/30 border-purple-200 group-hover:border-purple-300 group-hover:bg-purple-50/50'
-                                                            : 'bg-white border-slate-200 group-hover:border-blue-300 group-hover:bg-blue-50/10'
-                                                        }`}>
-                                                        <div className="flex flex-row items-center justify-between gap-3">
-                                                            <div className="min-w-0">
-                                                                <h4 className={`font-bold text-xs truncate ${isTotal ? 'text-white' : 'text-slate-900'}`}>
-                                                                    {step.stepName}
-                                                                </h4>
-                                                                <p className={`text-[10px] truncate ${isTotal ? 'text-slate-400' : 'text-slate-500'}`}>
-                                                                    {step.description}
-                                                                </p>
-                                                            </div>
-                                                            <div className="text-right flex-none flex items-center gap-3">
-                                                                <div className="flex flex-col items-end">
-                                                                    <span className={`font-mono text-sm font-bold ${isTotal ? 'text-green-400' : 'text-green-600'
-                                                                        }`}>
-                                                                        {formatCurrency(step.amount)}
-                                                                    </span>
+                                                {/* Step Content Card */}
+                                                <div className={`flex-1 rounded-xl border transition-all duration-300 overflow-hidden ${isTotal
+                                                    ? 'bg-gradient-to-r from-emerald-500/20 via-emerald-500/10 to-transparent border-emerald-500/40 shadow-lg shadow-emerald-500/10'
+                                                    : isExpanded
+                                                        ? 'bg-slate-800/80 border-slate-600 shadow-lg'
+                                                        : 'bg-slate-800/50 border-slate-700/50 hover:border-slate-600 hover:bg-slate-800/80'
+                                                    }`}>
+                                                    <div className="p-4">
+                                                        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                                                            {/* Left side - Step Info */}
+                                                            <div className="flex items-center gap-3 min-w-0">
+                                                                <span className="text-xl flex-shrink-0">{getStepIcon()}</span>
+                                                                <div className="min-w-0">
+                                                                    <h4 className={`font-bold text-sm truncate ${isTotal ? 'text-emerald-300' : 'text-white'}`}>
+                                                                        {step.stepName}
+                                                                    </h4>
+                                                                    <p className="text-xs text-slate-400 truncate mt-0.5">
+                                                                        {step.description}
+                                                                    </p>
                                                                 </div>
+                                                            </div>
+
+                                                            {/* Right side - Amount & Remaining */}
+                                                            <div className="flex items-center gap-4 flex-shrink-0">
+                                                                {/* Distribution Amount */}
+                                                                <div className={`px-4 py-2 rounded-lg ${isTotal
+                                                                    ? 'bg-emerald-500/20 border border-emerald-500/30'
+                                                                    : 'bg-slate-700/50 border border-slate-600/50'
+                                                                    }`}>
+                                                                    <div className="text-[10px] text-slate-400 uppercase tracking-wider mb-0.5">
+                                                                        {isTotal ? 'Total Distributed' : 'Distribution'}
+                                                                    </div>
+                                                                    <div className={`font-mono text-base font-bold ${isTotal ? 'text-emerald-400' : colors.text}`}>
+                                                                        {formatCurrency(step.amount)}
+                                                                    </div>
+                                                                </div>
+
+                                                                {/* Remaining Balance */}
                                                                 {!isTotal && (
-                                                                    <div className="hidden sm:flex flex-col items-end border-l pl-3 border-slate-100">
-                                                                        <span className="text-[9px] text-slate-400 uppercase tracking-wider">Remaining Proceeds</span>
-                                                                        <span className="font-mono text-[10px] font-medium text-slate-500">
+                                                                    <div className="hidden lg:block px-4 py-2 rounded-lg bg-slate-900/50 border border-slate-700/50">
+                                                                        <div className="text-[10px] text-slate-500 uppercase tracking-wider mb-0.5">Remaining</div>
+                                                                        <div className="font-mono text-base font-medium text-slate-400">
                                                                             {formatCurrency(step.remainingBalance)}
-                                                                        </span>
+                                                                        </div>
+                                                                    </div>
+                                                                )}
+
+                                                                {/* Expand Indicator */}
+                                                                {!isTotal && step.details && (
+                                                                    <div className={`w-8 h-8 rounded-lg flex items-center justify-center transition-all duration-300 ${isExpanded
+                                                                        ? 'bg-slate-700 rotate-180'
+                                                                        : 'bg-slate-800 group-hover:bg-slate-700'
+                                                                        }`}>
+                                                                        <ChevronDown className="w-4 h-4 text-slate-400" />
                                                                     </div>
                                                                 )}
                                                             </div>
                                                         </div>
+
+                                                        {/* Progress bar for remaining */}
+                                                        {!isTotal && (
+                                                            <div className="mt-3 pt-3 border-t border-slate-700/30">
+                                                                <div className="flex items-center justify-between text-[10px] text-slate-500 mb-1">
+                                                                    <span>Proceeds allocated at this step</span>
+                                                                    <span className="font-mono">{((step.amount / exitValuation) * 100).toFixed(1)}%</span>
+                                                                </div>
+                                                                <div className="h-1.5 bg-slate-700 rounded-full overflow-hidden">
+                                                                    <div
+                                                                        className={`h-full rounded-full bg-gradient-to-r ${colors.from} ${colors.to} transition-all duration-500`}
+                                                                        style={{ width: `${Math.min((step.amount / exitValuation) * 100, 100)}%` }}
+                                                                    ></div>
+                                                                </div>
+                                                            </div>
+                                                        )}
                                                     </div>
                                                 </div>
+                                            </div>
 
-                                                {/* Inline expansion */}
-                                                {expandedStep && expandedStep.stepNumber === step.stepNumber && (
-                                                    <div className="bg-gray-50 border border-gray-200 rounded-lg p-4 mt-2 ml-9">
-                                                        <div className="flex items-center justify-between mb-4">
-                                                            <div>
-                                                                <h3 className="text-lg font-bold text-slate-900">{expandedStep.stepName}</h3>
-                                                                <p className="text-sm text-slate-500">{expandedStep.description}</p>
+                                            {/* Expanded Details Panel */}
+                                            {isExpanded && expandedStep && (
+                                                <div className="ml-12 mt-2 mb-2 animate-in fade-in slide-in-from-top-2 duration-300">
+                                                    <div className="bg-slate-800/80 backdrop-blur-sm rounded-xl border border-slate-700/50 overflow-hidden">
+                                                        {/* Panel Header */}
+                                                        <div className="px-5 py-4 border-b border-slate-700/50 bg-slate-800/50">
+                                                            <div className="flex items-center justify-between">
+                                                                <div className="flex items-center gap-3">
+                                                                    <div className={`w-10 h-10 rounded-lg bg-gradient-to-br ${colors.from} ${colors.to} flex items-center justify-center`}>
+                                                                        <span className="text-lg">{getStepIcon()}</span>
+                                                                    </div>
+                                                                    <div>
+                                                                        <h3 className="text-lg font-bold text-white">{expandedStep.stepName}</h3>
+                                                                        <p className="text-sm text-slate-400">{expandedStep.description}</p>
+                                                                    </div>
+                                                                </div>
+                                                                <button
+                                                                    onClick={(e) => {
+                                                                        e.stopPropagation();
+                                                                        setExpandedStep(null);
+                                                                    }}
+                                                                    className="p-2 hover:bg-slate-700 rounded-lg transition-colors text-slate-400 hover:text-white"
+                                                                >
+                                                                    <X className="w-5 h-5" />
+                                                                </button>
                                                             </div>
-                                                            <button
-                                                                onClick={(e) => {
-                                                                    e.stopPropagation();
-                                                                    setExpandedStep(null);
-                                                                }}
-                                                                className="p-2 hover:bg-slate-100 rounded-full transition-colors text-slate-400 hover:text-slate-600"
-                                                            >
-                                                                <X className="w-5 h-5" />
-                                                            </button>
                                                         </div>
 
-                                                        {/* Shareholder Table with Calculation Details */}
-                                                        <div>
-                                                            <h4 className="text-sm font-bold text-slate-900 mb-3">Shareholder Breakdown</h4>
-
-                                                            {/* Global Calculation Formula - only for Catchup */}
+                                                        {/* Panel Content */}
+                                                        <div className="p-5">
+                                                            {/* Calculation Method Card - for Catchup */}
                                                             {expandedStep.details?.calculation?.type === 'Catchup' && (
-                                                                <div className="bg-blue-50 border border-blue-200 rounded-lg p-3 mb-3">
-                                                                    <div className="flex items-center justify-between mb-1">
-                                                                        <div className="text-xs font-medium text-blue-700">📐 Méthode de calcul (Catch-up Pro-rata)</div>
-                                                                        <span className="text-[10px] font-bold px-2 py-0.5 bg-green-100 text-green-700 rounded-full border border-green-200">
+                                                                <div className="mb-5 p-4 rounded-xl bg-gradient-to-r from-blue-500/10 via-blue-500/5 to-transparent border border-blue-500/30">
+                                                                    <div className="flex items-center justify-between mb-3">
+                                                                        <div className="flex items-center gap-2">
+                                                                            <span className="text-lg">📐</span>
+                                                                            <span className="text-sm font-bold text-blue-300">Méthode de calcul (Catch-up Pro-rata)</span>
+                                                                        </div>
+                                                                        <span className="text-[10px] font-bold px-2 py-1 bg-emerald-500/20 text-emerald-400 rounded-full border border-emerald-500/30">
                                                                             ✓ Fully Diluted
                                                                         </span>
                                                                     </div>
-                                                                    <div className="text-sm font-mono text-blue-900">
+                                                                    <div className="text-sm font-mono text-slate-300 bg-slate-900/50 p-3 rounded-lg border border-slate-700/50">
                                                                         Montant = (Actions FD actionnaire / Total actions FD éligibles) × Proceeds à distribuer
                                                                     </div>
-                                                                    <div className="mt-1 text-[10px] text-blue-600 italic">
-                                                                        💡 Les options sont converties en actions ordinaires au moment de l'exit
+                                                                    <div className="mt-3 text-xs text-blue-300/70 flex items-center gap-2">
+                                                                        <span>💡</span>
+                                                                        <span className="italic">Les options sont converties en actions ordinaires au moment de l'exit</span>
                                                                     </div>
-                                                                    <div className="mt-2 grid grid-cols-3 gap-2 text-xs">
-                                                                        <div className="bg-white rounded p-2 border border-blue-100">
-                                                                            <div className="text-blue-600 font-medium">Total Actions FD Éligibles</div>
-                                                                            <div className="font-mono font-bold text-slate-900">
+                                                                    <div className="mt-4 grid grid-cols-3 gap-3">
+                                                                        <div className="bg-slate-900/50 rounded-lg p-3 border border-slate-700/50">
+                                                                            <div className="text-[10px] text-blue-400 uppercase tracking-wider mb-1">Total Actions FD</div>
+                                                                            <div className="font-mono font-bold text-white">
                                                                                 {expandedStep.details.calculation.totalEligibleShares?.toLocaleString() || 'N/A'}
                                                                             </div>
                                                                         </div>
-                                                                        <div className="bg-white rounded p-2 border border-blue-100">
-                                                                            <div className="text-blue-600 font-medium">Montant à Distribuer</div>
-                                                                            <div className="font-mono font-bold text-slate-900">
+                                                                        <div className="bg-slate-900/50 rounded-lg p-3 border border-slate-700/50">
+                                                                            <div className="text-[10px] text-blue-400 uppercase tracking-wider mb-1">Montant à Distribuer</div>
+                                                                            <div className="font-mono font-bold text-white">
                                                                                 {expandedStep.details.calculation.distributableAmount
                                                                                     ? formatCurrency(expandedStep.details.calculation.distributableAmount)
                                                                                     : 'N/A'}
                                                                             </div>
                                                                         </div>
-                                                                        <div className="bg-white rounded p-2 border border-blue-100">
-                                                                            <div className="text-blue-600 font-medium">Classe d'actions</div>
-                                                                            <div className="font-mono font-bold text-slate-900">
+                                                                        <div className="bg-slate-900/50 rounded-lg p-3 border border-slate-700/50">
+                                                                            <div className="text-[10px] text-blue-400 uppercase tracking-wider mb-1">Classe d'actions</div>
+                                                                            <div className="font-mono font-bold text-white">
                                                                                 {expandedStep.details.calculation.shareClass || 'N/A'}
                                                                             </div>
                                                                         </div>
@@ -958,159 +1194,190 @@ export const WaterfallView: React.FC<WaterfallViewProps> = ({
                                                                 </div>
                                                             )}
 
-                                                            <div className="border border-slate-200 rounded-lg overflow-hidden">
-                                                                <table className="w-full text-sm text-left">
-                                                                    <thead className="bg-slate-50 text-slate-500 font-medium border-b border-slate-200">
-                                                                        <tr>
-                                                                            <th className="px-4 py-2">Shareholder</th>
-                                                                            {/* Show calculation columns only for Catchup */}
-                                                                            {expandedStep.details?.calculation?.type === 'Catchup' && (
-                                                                                <>
-                                                                                    <th className="px-4 py-2 text-right">Actions FD</th>
-                                                                                    <th className="px-4 py-2 text-right">% du Pool</th>
-                                                                                    <th className="px-4 py-2 text-left">Formule</th>
-                                                                                </>
-                                                                            )}
-                                                                            <th className="px-4 py-2 text-right">Amount</th>
-                                                                        </tr>
-                                                                    </thead>
-                                                                    <tbody className="divide-y divide-slate-100">
-                                                                        {expandedStep.details?.shareholders.map((s) => (
-                                                                            <tr key={s.id} className="hover:bg-slate-50">
-                                                                                <td className="px-4 py-2 font-medium text-slate-900">{s.name}</td>
-                                                                                {/* Show calculation columns only for Catchup */}
-                                                                                {expandedStep.details?.calculation?.type === 'Catchup' && s.calculation && (
+                                                            {/* Shareholder Breakdown */}
+                                                            <div>
+                                                                <h4 className="text-sm font-bold text-white mb-3 flex items-center gap-2">
+                                                                    <span>👥</span> Shareholder Breakdown
+                                                                </h4>
+
+                                                                <div className="bg-slate-900/50 rounded-xl border border-slate-700/50 overflow-hidden">
+                                                                    <table className="w-full text-sm">
+                                                                        <thead>
+                                                                            <tr className="border-b border-slate-700/50">
+                                                                                <th className="px-4 py-3 text-left text-xs font-semibold text-slate-400 uppercase tracking-wider">Shareholder</th>
+                                                                                {expandedStep.details?.calculation?.type === 'Catchup' && (
                                                                                     <>
-                                                                                        <td className="px-4 py-2 text-right font-mono text-slate-600">
-                                                                                            {s.calculation.optionsConverted && s.calculation.optionsConverted > 0 ? (
-                                                                                                <div className="flex flex-col items-end">
-                                                                                                    <span className="font-bold">{s.calculation.shares.toLocaleString()}</span>
-                                                                                                    <span className="text-[10px] text-slate-400">
-                                                                                                        ({s.calculation.ordinaryShares?.toLocaleString()} + {s.calculation.optionsConverted.toLocaleString()} opts)
-                                                                                                    </span>
-                                                                                                </div>
-                                                                                            ) : (
-                                                                                                s.calculation.shares.toLocaleString()
-                                                                                            )}
-                                                                                        </td>
-                                                                                        <td className="px-4 py-2 text-right font-mono text-slate-600">
-                                                                                            {s.calculation.percentage.toFixed(2)}%
-                                                                                        </td>
-                                                                                        <td className="px-4 py-2 text-left">
-                                                                                            <span className="text-xs font-mono bg-slate-100 px-2 py-1 rounded text-slate-700">
-                                                                                                {s.calculation.formula}
-                                                                                            </span>
-                                                                                        </td>
+                                                                                        <th className="px-4 py-3 text-right text-xs font-semibold text-slate-400 uppercase tracking-wider">Actions FD</th>
+                                                                                        <th className="px-4 py-3 text-right text-xs font-semibold text-slate-400 uppercase tracking-wider">% du Pool</th>
+                                                                                        <th className="px-4 py-3 text-left text-xs font-semibold text-slate-400 uppercase tracking-wider">Formule</th>
                                                                                     </>
                                                                                 )}
-                                                                                <td className="px-4 py-2 text-right font-mono text-green-600 font-bold">
-                                                                                    {formatCurrency(s.amount)}
-                                                                                </td>
+                                                                                <th className="px-4 py-3 text-right text-xs font-semibold text-slate-400 uppercase tracking-wider">Amount</th>
                                                                             </tr>
-                                                                        ))}
-                                                                        {(!expandedStep.details?.shareholders || expandedStep.details.shareholders.length === 0) && (
-                                                                            <tr>
-                                                                                <td colSpan={expandedStep.details?.calculation?.type === 'Catchup' ? 5 : 2} className="px-4 py-4 text-center text-slate-500 italic">
-                                                                                    No specific shareholder breakdown available.
-                                                                                </td>
-                                                                            </tr>
-                                                                        )}
-                                                                    </tbody>
-                                                                    <tfoot className="bg-slate-50 font-bold border-t border-slate-200">
-                                                                        <tr>
-                                                                            <td className="px-4 py-2 text-slate-900">Total</td>
-                                                                            {expandedStep.details?.calculation?.type === 'Catchup' && (
-                                                                                <>
-                                                                                    <td className="px-4 py-2 text-right font-mono text-slate-600">
-                                                                                        {expandedStep.details.calculation.totalShares?.toLocaleString()}
+                                                                        </thead>
+                                                                        <tbody className="divide-y divide-slate-700/30">
+                                                                            {expandedStep.details?.shareholders.map((s) => (
+                                                                                <tr key={s.id} className="hover:bg-slate-700/20 transition-colors">
+                                                                                    <td className="px-4 py-3">
+                                                                                        <div className="flex items-center gap-2">
+                                                                                            <div className="w-7 h-7 rounded-full bg-gradient-to-br from-slate-600 to-slate-700 flex items-center justify-center text-xs font-bold text-slate-300">
+                                                                                                {s.name.charAt(0).toUpperCase()}
+                                                                                            </div>
+                                                                                            <span className="font-medium text-white">{s.name}</span>
+                                                                                        </div>
                                                                                     </td>
-                                                                                    <td className="px-4 py-2 text-right font-mono text-slate-600">
-                                                                                        100%
+                                                                                    {expandedStep.details?.calculation?.type === 'Catchup' && s.calculation && (
+                                                                                        <>
+                                                                                            <td className="px-4 py-3 text-right">
+                                                                                                {s.calculation.optionsConverted && s.calculation.optionsConverted > 0 ? (
+                                                                                                    <div className="text-right">
+                                                                                                        <span className="font-mono font-bold text-white">{s.calculation.shares.toLocaleString()}</span>
+                                                                                                        <div className="text-[10px] text-slate-500">
+                                                                                                            ({s.calculation.ordinaryShares?.toLocaleString()} + {s.calculation.optionsConverted.toLocaleString()} opts)
+                                                                                                        </div>
+                                                                                                    </div>
+                                                                                                ) : (
+                                                                                                    <span className="font-mono text-slate-300">{s.calculation.shares.toLocaleString()}</span>
+                                                                                                )}
+                                                                                            </td>
+                                                                                            <td className="px-4 py-3 text-right">
+                                                                                                <span className="font-mono text-slate-300">{s.calculation.percentage.toFixed(2)}%</span>
+                                                                                            </td>
+                                                                                            <td className="px-4 py-3">
+                                                                                                <span className="text-xs font-mono bg-slate-700/50 px-2 py-1 rounded text-slate-400">
+                                                                                                    {s.calculation.formula}
+                                                                                                </span>
+                                                                                            </td>
+                                                                                        </>
+                                                                                    )}
+                                                                                    <td className="px-4 py-3 text-right">
+                                                                                        <span className={`font-mono font-bold ${colors.text}`}>
+                                                                                            {formatCurrency(s.amount)}
+                                                                                        </span>
                                                                                     </td>
-                                                                                    <td></td>
-                                                                                </>
+                                                                                </tr>
+                                                                            ))}
+                                                                            {(!expandedStep.details?.shareholders || expandedStep.details.shareholders.length === 0) && (
+                                                                                <tr>
+                                                                                    <td colSpan={expandedStep.details?.calculation?.type === 'Catchup' ? 5 : 2} className="px-4 py-6 text-center text-slate-500 italic">
+                                                                                        No specific shareholder breakdown available.
+                                                                                    </td>
+                                                                                </tr>
                                                                             )}
-                                                                            <td className="px-4 py-2 text-right font-mono text-green-600">
-                                                                                {formatCurrency(expandedStep.amount)}
-                                                                            </td>
-                                                                        </tr>
-                                                                    </tfoot>
-                                                                </table>
+                                                                        </tbody>
+                                                                        <tfoot>
+                                                                            <tr className="bg-slate-800/50 border-t border-slate-600/50">
+                                                                                <td className="px-4 py-3 font-bold text-white">Total</td>
+                                                                                {expandedStep.details?.calculation?.type === 'Catchup' && (
+                                                                                    <>
+                                                                                        <td className="px-4 py-3 text-right font-mono text-slate-400">
+                                                                                            {expandedStep.details.calculation.totalShares?.toLocaleString()}
+                                                                                        </td>
+                                                                                        <td className="px-4 py-3 text-right font-mono text-slate-400">100%</td>
+                                                                                        <td></td>
+                                                                                    </>
+                                                                                )}
+                                                                                <td className="px-4 py-3 text-right">
+                                                                                    <span className={`font-mono font-bold text-lg ${colors.text}`}>
+                                                                                        {formatCurrency(expandedStep.amount)}
+                                                                                    </span>
+                                                                                </td>
+                                                                            </tr>
+                                                                        </tfoot>
+                                                                    </table>
+                                                                </div>
+
+                                                                {/* Verification note */}
+                                                                {expandedStep.details?.calculation?.type === 'Catchup' && (
+                                                                    <div className="mt-3 text-xs text-slate-400 flex items-center gap-2 px-3">
+                                                                        <span className="text-emerald-400">✓</span>
+                                                                        <span>Vérification: {expandedStep.details.calculation.formula}</span>
+                                                                    </div>
+                                                                )}
                                                             </div>
 
-                                                            {/* Verification note */}
-                                                            {expandedStep.details?.calculation?.type === 'Catchup' && (
-                                                                <div className="mt-3 text-xs text-slate-500 flex items-center gap-2">
-                                                                    <span className="text-green-500">✓</span>
-                                                                    <span>Vérification: {expandedStep.details.calculation.formula}</span>
+                                                            {/* Calculation Details for non-Catchup */}
+                                                            {expandedStep.details?.calculation && expandedStep.details.calculation.type !== 'Catchup' && (
+                                                                <div className="mt-5 p-4 rounded-xl bg-slate-900/50 border border-slate-700/50">
+                                                                    <h4 className="text-sm font-bold text-white mb-3 flex items-center gap-2">
+                                                                        <span>📊</span> Calculation Details
+                                                                    </h4>
+                                                                    <div className="grid grid-cols-2 gap-3">
+                                                                        {expandedStep.details.calculation.valuation !== undefined && (
+                                                                            <div className="bg-slate-800/50 rounded-lg p-3 border border-slate-700/30">
+                                                                                <div className="text-[10px] text-slate-500 uppercase tracking-wider mb-1">Valuation</div>
+                                                                                <div className="font-mono font-bold text-white">{formatCurrency(expandedStep.details.calculation.valuation)}</div>
+                                                                            </div>
+                                                                        )}
+                                                                        {expandedStep.details.calculation.pricePerShare !== undefined && (
+                                                                            <div className="bg-slate-800/50 rounded-lg p-3 border border-slate-700/30">
+                                                                                <div className="text-[10px] text-slate-500 uppercase tracking-wider mb-1">Price per Share</div>
+                                                                                <div className="font-mono font-bold text-white">{formatCurrency(expandedStep.details.calculation.pricePerShare)}</div>
+                                                                            </div>
+                                                                        )}
+                                                                        {expandedStep.details.calculation.preferenceMultiple !== undefined && (
+                                                                            <div className="bg-slate-800/50 rounded-lg p-3 border border-slate-700/30">
+                                                                                <div className="text-[10px] text-slate-500 uppercase tracking-wider mb-1">Pref Multiple</div>
+                                                                                <div className="font-mono font-bold text-white">{expandedStep.details.calculation.preferenceMultiple}x</div>
+                                                                            </div>
+                                                                        )}
+                                                                        {expandedStep.details.calculation.type && (
+                                                                            <div className="bg-slate-800/50 rounded-lg p-3 border border-slate-700/30">
+                                                                                <div className="text-[10px] text-slate-500 uppercase tracking-wider mb-1">Type</div>
+                                                                                <div className="font-mono font-bold text-white">{expandedStep.details.calculation.type}</div>
+                                                                            </div>
+                                                                        )}
+                                                                        {expandedStep.details.calculation.shareClass && (
+                                                                            <div className="bg-slate-800/50 rounded-lg p-3 border border-slate-700/30">
+                                                                                <div className="text-[10px] text-slate-500 uppercase tracking-wider mb-1">Share Class</div>
+                                                                                <div className="font-mono font-bold text-white">{expandedStep.details.calculation.shareClass}</div>
+                                                                            </div>
+                                                                        )}
+                                                                        {expandedStep.details.calculation.investedAmount !== undefined && (
+                                                                            <>
+                                                                                <div className="bg-slate-800/50 rounded-lg p-3 border border-slate-700/30">
+                                                                                    <div className="text-[10px] text-slate-500 uppercase tracking-wider mb-1">Total Invested</div>
+                                                                                    <div className="font-mono font-bold text-white">{formatCurrency(expandedStep.details.calculation.investedAmount)}</div>
+                                                                                </div>
+                                                                                <div className="col-span-2 bg-gradient-to-r from-blue-500/10 via-blue-500/5 to-transparent rounded-lg p-3 border border-blue-500/30">
+                                                                                    <div className="text-[10px] text-blue-400 uppercase tracking-wider mb-1">Calculation Formula</div>
+                                                                                    <div className="font-mono text-sm text-white">
+                                                                                        {formatCurrency(expandedStep.details.calculation.investedAmount)} × {expandedStep.details.calculation.preferenceMultiple}x = <span className={colors.text}>{formatCurrency(expandedStep.amount)}</span>
+                                                                                    </div>
+                                                                                </div>
+                                                                            </>
+                                                                        )}
+                                                                    </div>
                                                                 </div>
                                                             )}
                                                         </div>
-                                                        {/* Calculation Details Section - Hide for Catchup as it has its own top section */}
-                                                        {expandedStep.details?.calculation && expandedStep.details.calculation.type !== 'Catchup' && (
-                                                            <div className="mt-4 p-4 bg-gray-50 border border-gray-200 rounded-lg">
-                                                                <h4 className="text-lg font-semibold text-slate-800 mb-2">Calculation Details</h4>
-                                                                <div className="grid grid-cols-2 gap-2 text-sm">
-                                                                    {expandedStep.details.calculation.valuation !== undefined && (
-                                                                        <>
-                                                                            <div className="font-medium text-slate-600">Valuation:</div>
-                                                                            <div className="font-mono text-slate-900">
-                                                                                {formatCurrency(expandedStep.details.calculation.valuation)}
-                                                                            </div>
-                                                                        </>
-                                                                    )}
-                                                                    {expandedStep.details.calculation.pricePerShare !== undefined && (
-                                                                        <>
-                                                                            <div className="font-medium text-slate-600">Price per Share:</div>
-                                                                            <div className="font-mono text-slate-900">
-                                                                                {formatCurrency(expandedStep.details.calculation.pricePerShare)}
-                                                                            </div>
-                                                                        </>
-                                                                    )}
-                                                                    {expandedStep.details.calculation.preferenceMultiple !== undefined && (
-                                                                        <>
-                                                                            <div className="font-medium text-slate-600">Pref Multiple:</div>
-                                                                            <div className="font-mono text-slate-900">
-                                                                                {expandedStep.details.calculation.preferenceMultiple}x
-                                                                            </div>
-                                                                        </>
-                                                                    )}
-                                                                    {expandedStep.details.calculation.type && (
-                                                                        <>
-                                                                            <div className="font-medium text-slate-600">Type:</div>
-                                                                            <div className="font-mono text-slate-900">
-                                                                                {expandedStep.details.calculation.type}
-                                                                            </div>
-                                                                        </>
-                                                                    )}
-                                                                    {expandedStep.details.calculation.shareClass && (
-                                                                        <>
-                                                                            <div className="font-medium text-slate-600">Share Class:</div>
-                                                                            <div className="font-mono text-slate-900">
-                                                                                {expandedStep.details.calculation.shareClass}
-                                                                            </div>
-                                                                        </>
-                                                                    )}
-                                                                    {expandedStep.details.calculation.investedAmount !== undefined && (
-                                                                        <>
-                                                                            <div className="font-medium text-slate-600">Total Invested:</div>
-                                                                            <div className="font-mono text-slate-900">
-                                                                                {formatCurrency(expandedStep.details.calculation.investedAmount)}
-                                                                            </div>
-                                                                            <div className="font-medium text-slate-600">Calculation:</div>
-                                                                            <div className="font-mono text-slate-900 text-xs">
-                                                                                {formatCurrency(expandedStep.details.calculation.investedAmount)} × {expandedStep.details.calculation.preferenceMultiple}x = {formatCurrency(expandedStep.amount)}
-                                                                            </div>
-                                                                        </>
-                                                                    )}
-                                                                </div>
-                                                            </div>
-                                                        )}
                                                     </div>
-                                                )}
-                                            </React.Fragment>
-                                        );
-                                    })}
+                                                </div>
+                                            )}
+                                        </React.Fragment>
+                                    );
+                                })}
+                            </div>
+                        </div>
+
+                        {/* Footer Summary */}
+                        <div className="relative px-6 py-4 border-t border-slate-700/50 bg-slate-800/30">
+                            <div className="flex flex-wrap items-center justify-center gap-6 text-sm">
+                                <div className="flex items-center gap-2">
+                                    <div className="w-3 h-3 rounded-full bg-gradient-to-r from-amber-500 to-orange-400"></div>
+                                    <span className="text-slate-400">Carve-Out</span>
+                                </div>
+                                <div className="flex items-center gap-2">
+                                    <div className="w-3 h-3 rounded-full bg-gradient-to-r from-blue-500 to-blue-400"></div>
+                                    <span className="text-slate-400">Preferences</span>
+                                </div>
+                                <div className="flex items-center gap-2">
+                                    <div className="w-3 h-3 rounded-full bg-gradient-to-r from-purple-500 to-purple-400"></div>
+                                    <span className="text-slate-400">Participation</span>
+                                </div>
+                                <div className="flex items-center gap-2">
+                                    <div className="w-3 h-3 rounded-full bg-gradient-to-r from-cyan-500 to-cyan-400"></div>
+                                    <span className="text-slate-400">Pro-rata</span>
                                 </div>
                             </div>
                         </div>
@@ -1120,3 +1387,4 @@ export const WaterfallView: React.FC<WaterfallViewProps> = ({
         </div>
     );
 };
+

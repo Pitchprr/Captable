@@ -364,20 +364,17 @@ function App() {
     if (isLoadingFromPersistence) return;
 
     if (earnoutConfig.enabled && exitValuation > 0) {
-      // If exitValuation changes and earn-out is enabled, update EV
-      if (exitValuation !== earnoutConfig.generalParams.enterpriseValue) {
+      // If exitValuation changes and earn-out is enabled, update EV and recalculate amounts proportionally
+      if (exitValuation !== earnoutConfig.generalParams.enterpriseValue && earnoutConfig.generalParams.enterpriseValue > 0) {
+        const ratio = exitValuation / earnoutConfig.generalParams.enterpriseValue;
         setEarnoutConfig(prev => ({
           ...prev,
           generalParams: {
             ...prev.generalParams,
             enterpriseValue: exitValuation,
-            // Recalculate upfront and earnout based on percentages if in percent mode
-            upfrontPayment: prev.generalParams.upfrontMode === 'percent'
-              ? Math.round(exitValuation * (prev.generalParams.upfrontPayment / prev.generalParams.enterpriseValue))
-              : prev.generalParams.upfrontPayment,
-            earnoutMax: prev.generalParams.earnoutMode === 'percent'
-              ? Math.round(exitValuation * (prev.generalParams.earnoutMax / prev.generalParams.enterpriseValue))
-              : prev.generalParams.earnoutMax
+            // Always recalculate proportionally to maintain the same split ratio
+            upfrontPayment: Math.round(prev.generalParams.upfrontPayment * ratio),
+            earnoutMax: Math.round(prev.generalParams.earnoutMax * ratio)
           }
         }));
       }

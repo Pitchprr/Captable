@@ -3,6 +3,7 @@ import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip, Legend } from 'recha
 import type { CapTable } from '../../engine/types';
 import { calculateCapTableState } from '../../engine/CapTableEngine';
 import { formatPercent, formatNumber } from '../../utils';
+import { CHART_COLORS } from '../../theme';
 
 interface CapTableChartsProps {
     capTable: CapTable;
@@ -43,18 +44,6 @@ export const CapTableCharts: React.FC<CapTableChartsProps> = ({ capTable }) => {
         return result.sort((a, b) => b.value - a.value);
     }, [summary, capTable.rounds, capTable.optionGrants, totalSharesOutstanding]);
 
-    // Custom colors for the chart
-    const COLORS = [
-        '#3b82f6', // blue-500
-        '#10b981', // emerald-500
-        '#f59e0b', // amber-500
-        '#8b5cf6', // violet-500
-        '#ec4899', // pink-500
-        '#6366f1', // indigo-500
-        '#ef4444', // red-500
-        '#94a3b8', // slate-400
-    ];
-
     if (totalSharesOutstanding === 0) {
         return null;
     }
@@ -76,7 +65,7 @@ export const CapTableCharts: React.FC<CapTableChartsProps> = ({ capTable }) => {
                             label={({ name, percent }: any) => `${name} ${(percent * 100).toFixed(1)}%`}
                         >
                             {data.map((_, index) => (
-                                <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} strokeWidth={1} />
+                                <Cell key={`cell-${index}`} fill={CHART_COLORS[index % CHART_COLORS.length]} strokeWidth={1} />
                             ))}
                         </Pie>
                         <Tooltip
