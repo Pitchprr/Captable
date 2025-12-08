@@ -8,6 +8,8 @@ import { Input } from '../ui/Input';
 import { FormattedNumberInput } from '../ui/FormattedNumberInput';
 import { PreferenceConfig } from './PreferenceConfig';
 import { WATERFALL_COLORS } from '../../theme';
+import { ExitScenariosConfig } from './ExitScenariosConfig';
+import { MultiExitComparison } from './MultiExitComparison';
 
 interface WaterfallViewProps {
     capTable: CapTable;
@@ -52,6 +54,11 @@ export const WaterfallView: React.FC<WaterfallViewProps> = ({
     const [escrowPercent, setEscrowPercent] = useState(10);
     const [escrowDuration, setEscrowDuration] = useState(12);
 
+    // Sensitivity Analysis State
+    const [sensitivityAnalysisEnabled, setSensitivityAnalysisEnabled] = useState(false);
+    const [sensitivityScenarioCount, setSensitivityScenarioCount] = useState(10);
+    const [sensitivityStepSize, setSensitivityStepSize] = useState(5000000);
+
     // If earn-out is enabled, the waterfall distributes the Upfront Payment, not the full EV
     const effectiveExitValuation = earnoutEnabled ? earnoutUpfront : exitValuation;
 
@@ -83,6 +90,18 @@ export const WaterfallView: React.FC<WaterfallViewProps> = ({
         calculateWaterfall(capTable, effectiveExitValuation, preferences, maConfig),
         [capTable, effectiveExitValuation, preferences, maConfig]
     );
+
+    // Calculate Sensitivity Scenarios
+    const sensitivityScenarios = useMemo(() => {
+        if (!sensitivityAnalysisEnabled) return [];
+        return Array.from({ length: sensitivityScenarioCount }, (_, i) => {
+            const ev = effectiveExitValuation + i * sensitivityStepSize;
+            return {
+                exitValue: ev,
+                result: calculateWaterfall(capTable, ev, preferences, maConfig)
+            };
+        });
+    }, [sensitivityAnalysisEnabled, sensitivityScenarioCount, sensitivityStepSize, effectiveExitValuation, capTable, preferences, maConfig]);
 
     const chartData = useMemo(() => {
         const dataMap = new Map<string, { name: string; Preference: number; Participation: number; CarveOut: number; Invested: number; order: number }>();
@@ -616,775 +635,823 @@ export const WaterfallView: React.FC<WaterfallViewProps> = ({
                     </div>
                 </div>
 
-                {/* Results Panel */}
-                <div className="lg:col-span-2 space-y-8">
+                {/* Sensitivity Analysis Configuration */}
+                <div className="bg-white p-6 rounded-xl border border-slate-200 shadow-sm">
+                    <button
+                        onClick={() => setSensitivityAnalysisEnabled(!sensitivityAnalysisEnabled)}
+                        className="w-full flex items-center justify-between text-left"
+                    >
+                        <div className="flex items-center gap-2">
+                            <h3 className="text-lg font-semibold text-slate-800">
+                                📈 Sensitivity Analysis
+                            </h3>
+                        </div>
+                        <span className="text-sm text-slate-500">
+                            {sensitivityAnalysisEnabled ? '▲ Hide' : '▼ Show'}
+                        </span>
+                    </button>
 
-                    {/* Conversion Analysis Panel - Premium Redesign */}
-                    {conversionAnalysis && conversionAnalysis.length > 0 && (
-                        <div className="bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900 p-6 rounded-2xl shadow-xl border border-slate-700/50 overflow-hidden relative">
-                            {/* Background Pattern */}
-                            <div className="absolute inset-0 opacity-5">
-                                <div className="absolute inset-0" style={{
-                                    backgroundImage: `url("data:image/svg+xml,%3Csvg width='60' height='60' viewBox='0 0 60 60' xmlns='http://www.w3.org/2000/svg'%3E%3Cg fill='none' fill-rule='evenodd'%3E%3Cg fill='%23ffffff' fill-opacity='1'%3E%3Cpath d='M36 34v-4h-2v4h-4v2h4v4h2v-4h4v-2h-4zm0-30V0h-2v4h-4v2h4v4h2V6h4V4h-4zM6 34v-4H4v4H0v2h4v4h2v-4h4v-2H6zM6 4V0H4v4H0v2h4v4h2V6h4V4H6z'/%3E%3C/g%3E%3C/g%3E%3C/svg%3E")`,
-                                }} />
-                            </div>
-
-                            {/* Header */}
-                            <div className="relative flex items-center justify-between mb-6">
-                                <div className="flex items-center gap-3">
-                                    <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-amber-400 to-orange-500 flex items-center justify-center shadow-lg shadow-orange-500/20">
-                                        <span className="text-2xl">⚖️</span>
-                                    </div>
-                                    <div>
-                                        <h3 className="text-xl font-bold text-white">Conversion Analysis</h3>
-                                        <p className="text-slate-400 text-sm">Non-Participating Preferred Decision Matrix</p>
-                                    </div>
-                                </div>
-                                <div className="hidden sm:flex items-center gap-2 px-3 py-1.5 rounded-full bg-slate-700/50 border border-slate-600">
-                                    <div className="w-2 h-2 rounded-full bg-green-400 animate-pulse"></div>
-                                    <span className="text-xs text-slate-300 font-medium">Auto-calculated</span>
-                                </div>
-                            </div>
-
-                            {/* Cards Grid */}
-                            <div className="relative grid gap-4">
-                                {conversionAnalysis.map((analysis, index) => {
-                                    const isConversion = analysis.decision === 'Convert to Ordinary';
-                                    const difference = analysis.valueAsConverted - analysis.valueAsPref;
-                                    const percentGain = analysis.valueAsPref > 0
-                                        ? ((difference / analysis.valueAsPref) * 100)
-                                        : 0;
-
-                                    return (
-                                        <div
-                                            key={analysis.shareClass}
-                                            className={`relative rounded-xl p-5 border backdrop-blur-sm transition-all duration-300 hover:scale-[1.01] hover:shadow-lg ${isConversion
-                                                ? 'bg-gradient-to-r from-purple-500/10 via-purple-500/5 to-transparent border-purple-500/30 hover:border-purple-400/50'
-                                                : 'bg-gradient-to-r from-blue-500/10 via-blue-500/5 to-transparent border-blue-500/30 hover:border-blue-400/50'
-                                                }`}
-                                            style={{ animationDelay: `${index * 100}ms` }}
-                                        >
-                                            {/* Share Class Badge */}
-                                            <div className="flex items-start justify-between mb-4">
-                                                <div className="flex items-center gap-3">
-                                                    <div className={`w-10 h-10 rounded-lg flex items-center justify-center font-bold text-lg shadow-lg ${isConversion
-                                                        ? 'bg-gradient-to-br from-purple-500 to-purple-600 text-white shadow-purple-500/30'
-                                                        : 'bg-gradient-to-br from-blue-500 to-blue-600 text-white shadow-blue-500/30'
-                                                        }`}>
-                                                        {analysis.shareClass}
-                                                    </div>
-                                                    <div>
-                                                        <span className="text-white font-semibold text-base">{analysis.shareClass} Shares</span>
-                                                        <p className="text-slate-400 text-xs mt-0.5">{analysis.totalShares?.toLocaleString() || 0} shares</p>
-                                                    </div>
-                                                </div>
-
-                                                {/* Decision Badge */}
-                                                <div className={`flex items-center gap-2 px-4 py-2 rounded-full font-bold text-sm shadow-lg transition-transform hover:scale-105 ${isConversion
-                                                    ? 'bg-gradient-to-r from-purple-500 to-purple-600 text-white shadow-purple-500/30'
-                                                    : 'bg-gradient-to-r from-blue-500 to-blue-600 text-white shadow-blue-500/30'
-                                                    }`}>
-                                                    <span>{isConversion ? '🔄' : '🛡️'}</span>
-                                                    <span className="hidden sm:inline">{analysis.decision}</span>
-                                                    <span className="sm:hidden">{isConversion ? 'Convert' : 'Keep'}</span>
-                                                </div>
-                                            </div>
-
-                                            {/* Comparison Cards */}
-                                            <div className="grid sm:grid-cols-2 gap-3 mb-4">
-                                                {/* Value as Preference */}
-                                                <div className={`relative rounded-lg p-4 border ${!isConversion
-                                                    ? 'bg-blue-500/10 border-blue-400/30'
-                                                    : 'bg-slate-700/30 border-slate-600/30'
-                                                    }`}>
-                                                    {!isConversion && (
-                                                        <div className="absolute -top-2 -right-2">
-                                                            <span className="bg-blue-500 text-white text-[10px] font-bold px-2 py-0.5 rounded-full shadow-lg">
-                                                                ✓ CHOSEN
-                                                            </span>
-                                                        </div>
-                                                    )}
-                                                    <div className="flex items-center gap-2 mb-2">
-                                                        <span className="text-lg">🛡️</span>
-                                                        <span className="text-slate-300 text-sm font-medium">Value as Preference</span>
-                                                    </div>
-                                                    <div className={`font-mono text-xl font-bold ${!isConversion ? 'text-blue-400' : 'text-slate-400'}`}>
-                                                        {formatCurrency(analysis.valueAsPref)}
-                                                    </div>
-                                                </div>
-
-                                                {/* Value as Converted */}
-                                                <div className={`relative rounded-lg p-4 border ${isConversion
-                                                    ? 'bg-purple-500/10 border-purple-400/30'
-                                                    : 'bg-slate-700/30 border-slate-600/30'
-                                                    }`}>
-                                                    {isConversion && (
-                                                        <div className="absolute -top-2 -right-2">
-                                                            <span className="bg-purple-500 text-white text-[10px] font-bold px-2 py-0.5 rounded-full shadow-lg">
-                                                                ✓ CHOSEN
-                                                            </span>
-                                                        </div>
-                                                    )}
-                                                    <div className="flex items-center gap-2 mb-2">
-                                                        <span className="text-lg">🔄</span>
-                                                        <span className="text-slate-300 text-sm font-medium">Value as Ordinary</span>
-                                                    </div>
-                                                    <div className={`font-mono text-xl font-bold ${isConversion ? 'text-purple-400' : 'text-slate-400'}`}>
-                                                        {formatCurrency(analysis.valueAsConverted)}
-                                                    </div>
-                                                </div>
-                                            </div>
-
-                                            {/* Difference Indicator & Reason */}
-                                            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pt-3 border-t border-slate-600/30">
-                                                {/* Gain/Loss Indicator */}
-                                                <div className={`flex items-center gap-2 px-3 py-1.5 rounded-lg ${difference > 0
-                                                    ? 'bg-green-500/20 border border-green-500/30'
-                                                    : difference < 0
-                                                        ? 'bg-red-500/20 border border-red-500/30'
-                                                        : 'bg-slate-600/20 border border-slate-500/30'
-                                                    }`}>
-                                                    <span className={`text-lg ${difference > 0 ? 'text-green-400' : difference < 0 ? 'text-red-400' : 'text-slate-400'}`}>
-                                                        {difference > 0 ? '📈' : difference < 0 ? '📉' : '➖'}
-                                                    </span>
-                                                    <div>
-                                                        <span className={`font-mono font-bold text-sm ${difference > 0 ? 'text-green-400' : difference < 0 ? 'text-red-400' : 'text-slate-400'
-                                                            }`}>
-                                                            {difference > 0 ? '+' : ''}{formatCurrency(difference)}
-                                                        </span>
-                                                        <span className={`ml-2 text-xs font-medium ${difference > 0 ? 'text-green-400/70' : difference < 0 ? 'text-red-400/70' : 'text-slate-500'
-                                                            }`}>
-                                                            ({percentGain > 0 ? '+' : ''}{percentGain.toFixed(1)}%)
-                                                        </span>
-                                                    </div>
-                                                </div>
-
-                                                {/* Reason */}
-                                                <div className="flex items-center gap-2 text-slate-400 text-sm max-w-md">
-                                                    <span className="text-amber-400">💡</span>
-                                                    <span className="italic">{analysis.reason}</span>
-                                                </div>
-                                            </div>
-                                        </div>
-                                    );
-                                })}
-                            </div>
-
-                            {/* Summary Footer */}
-                            <div className="relative mt-6 pt-4 border-t border-slate-700/50">
-                                <div className="flex flex-wrap items-center justify-center gap-6 text-sm">
-                                    <div className="flex items-center gap-2">
-                                        <div className="w-3 h-3 rounded-full bg-gradient-to-r from-purple-500 to-purple-600"></div>
-                                        <span className="text-slate-400">Converting to Ordinary:</span>
-                                        <span className="text-white font-bold">
-                                            {conversionAnalysis.filter(a => a.decision === 'Convert to Ordinary').length}
-                                        </span>
-                                    </div>
-                                    <div className="flex items-center gap-2">
-                                        <div className="w-3 h-3 rounded-full bg-gradient-to-r from-blue-500 to-blue-600"></div>
-                                        <span className="text-slate-400">Keeping Preference:</span>
-                                        <span className="text-white font-bold">
-                                            {conversionAnalysis.filter(a => a.decision === 'Keep Preference').length}
-                                        </span>
-                                    </div>
-                                </div>
-                            </div>
+                    {sensitivityAnalysisEnabled && (
+                        <div className="mt-4 animate-in fade-in slide-in-from-top-2">
+                            <ExitScenariosConfig
+                                baseExitValue={effectiveExitValuation}
+                                scenarioCount={sensitivityScenarioCount}
+                                stepSize={sensitivityStepSize}
+                                setScenarioCount={setSensitivityScenarioCount}
+                                setStepSize={setSensitivityStepSize}
+                            />
                         </div>
                     )}
+                </div>
+            </div>
 
-                    {/* Chart */}
-                    <div className="bg-white p-6 rounded-xl border border-slate-200 shadow-sm">
-                        <h3 className="text-lg font-semibold text-slate-800 mb-6">Payout Distribution</h3>
-                        <div className="h-80">
-                            <ResponsiveContainer width="100%" height="100%">
-                                <BarChart data={chartData} margin={{ top: 20, right: 30, left: 20, bottom: 5 }}>
-                                    <CartesianGrid strokeDasharray="3 3" vertical={false} />
-                                    <XAxis dataKey="name" />
-                                    <YAxis tickFormatter={(value) => new Intl.NumberFormat('en-US', { notation: "compact", compactDisplay: "short" }).format(value)} />
-                                    <RechartsTooltip
-                                        content={({ active, payload, label }) => {
-                                            if (active && payload && payload.length) {
-                                                const data = payload[0].payload;
-                                                const carveOut = data.CarveOut || 0;
-                                                const preference = data.Preference || 0;
-                                                const participation = data.Participation || 0;
-                                                const totalPayout = carveOut + preference + participation;
-                                                const multiple = data.Invested > 0 ? totalPayout / data.Invested : 0;
+            {/* Results Panel */}
+            <div className="lg:col-span-2 space-y-8">
 
-                                                return (
-                                                    <div className="bg-white p-3 border border-slate-200 shadow-lg rounded-lg text-sm z-50">
-                                                        <p className="font-semibold text-slate-900 mb-2">{label}</p>
-
-                                                        {/* Individual components */}
-                                                        {payload.map((entry: any) => (
-                                                            entry.value > 0 && (
-                                                                <div key={entry.name} className="flex items-center justify-between gap-4 mb-1">
-                                                                    <div className="flex items-center gap-2">
-                                                                        <div className="w-2 h-2 rounded-full" style={{ backgroundColor: entry.color }} />
-                                                                        <span className="text-slate-600">{entry.name}</span>
-                                                                    </div>
-                                                                    <span className="font-mono font-medium text-slate-900">{formatCurrency(entry.value)}</span>
-                                                                </div>
-                                                            )
-                                                        ))}
-
-                                                        {/* Total Payout */}
-                                                        <div className="mt-2 pt-2 border-t border-slate-100 flex justify-between items-center gap-4">
-                                                            <span className="text-slate-700 font-medium">Total Payout</span>
-                                                            <span className="font-mono font-bold text-slate-900">{formatCurrency(totalPayout)}</span>
-                                                        </div>
-
-                                                        {/* Invested + Multiple */}
-                                                        <div className="mt-1 flex justify-between items-center gap-4">
-                                                            <span className="text-slate-500">Invested</span>
-                                                            <div className="text-right">
-                                                                <span className="font-mono font-medium text-slate-900">{formatCurrency(data.Invested)}</span>
-                                                                <span className={`ml-1.5 text-xs font-bold ${multiple >= 1 ? 'text-green-600' : 'text-red-500'}`}>
-                                                                    ({multiple.toFixed(2)}x)
-                                                                </span>
-                                                            </div>
-                                                        </div>
-                                                    </div>
-                                                );
-                                            }
-                                            return null;
-                                        }}
-                                        cursor={{ fill: '#f1f5f9' }}
-                                    />
-                                    <Legend />
-                                    <Bar dataKey="Participation" stackId="a" fill={WATERFALL_COLORS.participation} />
-                                    {hasPrefPayouts && <Bar dataKey="Preference" stackId="a" fill={WATERFALL_COLORS.preference} />}
-                                    {carveOutPercent > 0 && <Bar dataKey="CarveOut" stackId="a" fill={WATERFALL_COLORS.carveOut} name="Carve-Out" />}
-                                </BarChart>
-                            </ResponsiveContainer>
-                        </div>
-                    </div>
-
-                    {/* Payout Table */}
-                    <div className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
-                        <div className="px-6 py-4 border-b border-slate-200 bg-slate-50 flex justify-between items-center">
-                            <h3 className="text-lg font-semibold text-slate-800">
-                                {earnoutEnabled ? 'Detailed Payouts (Upfront Only)' : 'Detailed Payouts'}
-                            </h3>
-                            {earnoutEnabled && (
-                                <span className="text-xs font-medium px-2 py-1 bg-blue-100 text-blue-700 rounded-full border border-blue-200">
-                                    Distribution du cash immédiat (hors Earn-out)
-                                </span>
-                            )}
-                        </div>
-                        <div className="overflow-x-auto">
-                            <table className="w-full text-sm text-left">
-                                <thead className="bg-slate-50 text-slate-500 font-medium border-b border-slate-200">
-                                    <tr>
-                                        <th className="px-2 py-2">Shareholder</th>
-                                        <th className="px-2 py-2 text-right whitespace-nowrap">Invested</th>
-                                        {carveOutPercent > 0 && <th className="px-2 py-2 text-right whitespace-nowrap">Carve-Out</th>}
-                                        {hasPrefPayouts && <th className="px-2 py-2 text-right whitespace-nowrap">Preference</th>}
-                                        <th className="px-2 py-2 text-right whitespace-nowrap">Participation</th>
-                                        <th className="px-2 py-2 text-right whitespace-nowrap">Total Payout</th>
-                                        <th className="px-2 py-2 text-right whitespace-nowrap">% of Proceeds</th>
-                                        <th className="px-2 py-2 text-right whitespace-nowrap">Multiple</th>
-                                    </tr>
-                                </thead>
-                                <tbody className="divide-y divide-slate-100">
-                                    {payouts.map((p) => {
-                                        const totalProceeds = payouts.reduce((sum, payout) => sum + payout.totalPayout, 0);
-                                        const percentOfProceeds = totalProceeds > 0 ? (p.totalPayout / totalProceeds) * 100 : 0;
-
-                                        return (
-                                            <tr key={p.shareholderId} className="hover:bg-slate-50 transition-colors">
-                                                <td className="px-2 py-2 font-medium text-slate-900">{p.shareholderName}</td>
-                                                <td className="px-2 py-2 text-right text-slate-500 whitespace-nowrap">{formatCurrency(p.totalInvested)}</td>
-                                                {carveOutPercent > 0 && (
-                                                    <td className="px-2 py-2 text-right text-slate-600 font-mono whitespace-nowrap">
-                                                        {p.carveOutPayout > 0 ? formatCurrency(p.carveOutPayout) : '-'}
-                                                    </td>
-                                                )}
-                                                {hasPrefPayouts && (
-                                                    <td className="px-2 py-2 text-right text-slate-600 font-mono whitespace-nowrap">
-                                                        {p.preferencePayout > 0 ? formatCurrency(p.preferencePayout) : '-'}
-                                                    </td>
-                                                )}
-                                                <td className="px-2 py-2 text-right text-slate-600 font-mono whitespace-nowrap">
-                                                    {p.participationPayout > 0 ? formatCurrency(p.participationPayout) : '-'}
-                                                </td>
-                                                <td className="px-2 py-2 text-right font-bold text-slate-900 bg-blue-50/30 whitespace-nowrap">
-                                                    {formatCurrency(p.totalPayout)}
-                                                </td>
-                                                <td className="px-2 py-2 text-right font-bold text-purple-600 whitespace-nowrap">
-                                                    {percentOfProceeds.toFixed(2)}%
-                                                </td>
-                                                <td className={`px-2 py-2 text-right font-bold whitespace-nowrap ${p.multiple >= 1 ? 'text-green-600' : 'text-red-500'}`}>
-                                                    {p.multiple.toFixed(2)}x
-                                                </td>
-                                            </tr>
-                                        );
-                                    })}
-                                    <tr className="bg-slate-900 text-white font-bold">
-                                        <td className="px-2 py-2">TOTAL</td>
-                                        <td className="px-2 py-2 text-right whitespace-nowrap">
-                                            {formatCurrency(payouts.reduce((sum, p) => sum + p.totalInvested, 0))}
-                                        </td>
-                                        {carveOutPercent > 0 && (
-                                            <td className="px-2 py-2 text-right text-slate-300 whitespace-nowrap">
-                                                {formatCurrency(payouts.reduce((sum, p) => sum + p.carveOutPayout, 0))}
-                                            </td>
-                                        )}
-                                        {hasPrefPayouts && (
-                                            <td className="px-2 py-2 text-right text-slate-300 whitespace-nowrap">
-                                                {formatCurrency(payouts.reduce((sum, p) => sum + p.preferencePayout, 0))}
-                                            </td>
-                                        )}
-                                        <td className="px-2 py-2 text-right text-slate-300 whitespace-nowrap">
-                                            {formatCurrency(payouts.reduce((sum, p) => sum + p.participationPayout, 0))}
-                                        </td>
-                                        <td className="px-2 py-2 text-right text-white whitespace-nowrap">
-                                            {formatCurrency(payouts.reduce((sum, p) => sum + p.totalPayout, 0))}
-                                        </td>
-                                        <td className="px-2 py-2 text-right text-purple-300 whitespace-nowrap">
-                                            100.00%
-                                        </td>
-                                        <td className="px-2 py-2 text-right whitespace-nowrap">
-                                            {(payouts.reduce((sum, p) => sum + p.totalPayout, 0) / payouts.reduce((sum, p) => sum + p.totalInvested, 0)).toFixed(2)}x
-                                        </td>
-                                    </tr>
-                                </tbody>
-                            </table>
-                        </div>
-                    </div>
-
-                    {/* Waterfall Steps - Premium Redesign */}
-                    <div className="bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900 rounded-2xl shadow-2xl border border-slate-700/50 overflow-hidden relative">
-                        {/* Animated Background */}
-                        <div className="absolute inset-0 overflow-hidden">
-                            <div className="absolute -top-1/2 -right-1/2 w-full h-full bg-gradient-to-br from-blue-500/10 via-transparent to-transparent rounded-full blur-3xl"></div>
-                            <div className="absolute -bottom-1/2 -left-1/2 w-full h-full bg-gradient-to-tr from-emerald-500/10 via-transparent to-transparent rounded-full blur-3xl"></div>
+                {/* Conversion Analysis Panel - Premium Redesign */}
+                {conversionAnalysis && conversionAnalysis.length > 0 && (
+                    <div className="bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900 p-6 rounded-2xl shadow-xl border border-slate-700/50 overflow-hidden relative">
+                        {/* Background Pattern */}
+                        <div className="absolute inset-0 opacity-5">
+                            <div className="absolute inset-0" style={{
+                                backgroundImage: `url("data:image/svg+xml,%3Csvg width='60' height='60' viewBox='0 0 60 60' xmlns='http://www.w3.org/2000/svg'%3E%3Cg fill='none' fill-rule='evenodd'%3E%3Cg fill='%23ffffff' fill-opacity='1'%3E%3Cpath d='M36 34v-4h-2v4h-4v2h4v4h2v-4h4v-2h-4zm0-30V0h-2v4h-4v2h4v4h2V6h4V4h-4zM6 34v-4H4v4H0v2h4v4h2v-4h4v-2H6zM6 4V0H4v4H0v2h4v4h2V6h4V4H6z'/%3E%3C/g%3E%3C/g%3E%3C/svg%3E")`,
+                            }} />
                         </div>
 
                         {/* Header */}
-                        <div className="relative px-6 py-5 border-b border-slate-700/50 flex items-center justify-between">
-                            <div className="flex items-center gap-4">
-                                <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-blue-500 to-cyan-400 flex items-center justify-center shadow-lg shadow-blue-500/25">
-                                    <Layers className="w-6 h-6 text-white" />
+                        <div className="relative flex items-center justify-between mb-6">
+                            <div className="flex items-center gap-3">
+                                <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-amber-400 to-orange-500 flex items-center justify-center shadow-lg shadow-orange-500/20">
+                                    <span className="text-2xl">⚖️</span>
                                 </div>
                                 <div>
-                                    <h3 className="text-xl font-bold text-white">Distribution Waterfall</h3>
-                                    <p className="text-slate-400 text-sm">Step-by-step proceeds allocation</p>
+                                    <h3 className="text-xl font-bold text-white">Conversion Analysis</h3>
+                                    <p className="text-slate-400 text-sm">Non-Participating Preferred Decision Matrix</p>
                                 </div>
                             </div>
-                            <div className="hidden sm:flex items-center gap-3">
-                                <div className="flex items-center gap-2 px-3 py-1.5 rounded-full bg-emerald-500/20 border border-emerald-500/30">
-                                    <div className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></div>
-                                    <span className="text-xs text-emerald-300 font-medium">{steps.length} Steps</span>
-                                </div>
-                                <div className="px-3 py-1.5 rounded-full bg-slate-700/50 border border-slate-600">
-                                    <span className="text-xs text-slate-300 font-mono">{formatCurrency(exitValuation)} Exit</span>
-                                </div>
+                            <div className="hidden sm:flex items-center gap-2 px-3 py-1.5 rounded-full bg-slate-700/50 border border-slate-600">
+                                <div className="w-2 h-2 rounded-full bg-green-400 animate-pulse"></div>
+                                <span className="text-xs text-slate-300 font-medium">Auto-calculated</span>
                             </div>
                         </div>
 
-                        {/* Waterfall Content */}
-                        <div className="relative p-6">
-                            {/* Progress Bar Background */}
-                            <div className="absolute left-10 top-8 bottom-8 w-1 bg-gradient-to-b from-blue-500/50 via-purple-500/50 to-emerald-500/50 rounded-full"></div>
+                        {/* Cards Grid */}
+                        <div className="relative grid gap-4">
+                            {conversionAnalysis.map((analysis, index) => {
+                                const isConversion = analysis.decision === 'Convert to Ordinary';
+                                const difference = analysis.valueAsConverted - analysis.valueAsPref;
+                                const percentGain = analysis.valueAsPref > 0
+                                    ? ((difference / analysis.valueAsPref) * 100)
+                                    : 0;
 
-                            <div className="space-y-4">
-                                {steps.map((step, index) => {
-                                    const isTotal = step.isTotal;
-                                    const isExpanded = expandedStep?.stepNumber === step.stepNumber;
-                                    // Note: progressPercent could be used for a visual progress indicator
+                                return (
+                                    <div
+                                        key={analysis.shareClass}
+                                        className={`relative rounded-xl p-5 border backdrop-blur-sm transition-all duration-300 hover:scale-[1.01] hover:shadow-lg ${isConversion
+                                            ? 'bg-gradient-to-r from-purple-500/10 via-purple-500/5 to-transparent border-purple-500/30 hover:border-purple-400/50'
+                                            : 'bg-gradient-to-r from-blue-500/10 via-blue-500/5 to-transparent border-blue-500/30 hover:border-blue-400/50'
+                                            }`}
+                                        style={{ animationDelay: `${index * 100}ms` }}
+                                    >
+                                        {/* Share Class Badge */}
+                                        <div className="flex items-start justify-between mb-4">
+                                            <div className="flex items-center gap-3">
+                                                <div className={`w-10 h-10 rounded-lg flex items-center justify-center font-bold text-lg shadow-lg ${isConversion
+                                                    ? 'bg-gradient-to-br from-purple-500 to-purple-600 text-white shadow-purple-500/30'
+                                                    : 'bg-gradient-to-br from-blue-500 to-blue-600 text-white shadow-blue-500/30'
+                                                    }`}>
+                                                    {analysis.shareClass}
+                                                </div>
+                                                <div>
+                                                    <span className="text-white font-semibold text-base">{analysis.shareClass} Shares</span>
+                                                    <p className="text-slate-400 text-xs mt-0.5">{analysis.totalShares?.toLocaleString() || 0} shares</p>
+                                                </div>
+                                            </div>
 
-                                    // Determine step type for styling
-                                    const getStepColor = () => {
-                                        if (isTotal) return { from: 'from-emerald-500', to: 'to-emerald-400', ring: 'ring-emerald-500/50', bg: 'bg-emerald-500', text: 'text-emerald-400' };
-                                        if (step.stepName?.toLowerCase().includes('carve')) return { from: 'from-amber-500', to: 'to-orange-400', ring: 'ring-amber-500/50', bg: 'bg-amber-500', text: 'text-amber-400' };
-                                        if (step.stepName?.toLowerCase().includes('pref') || step.stepName?.toLowerCase().includes('liqu')) return { from: 'from-blue-500', to: 'to-blue-400', ring: 'ring-blue-500/50', bg: 'bg-blue-500', text: 'text-blue-400' };
-                                        if (step.isParticipating) return { from: 'from-purple-500', to: 'to-purple-400', ring: 'ring-purple-500/50', bg: 'bg-purple-500', text: 'text-purple-400' };
-                                        return { from: 'from-cyan-500', to: 'to-cyan-400', ring: 'ring-cyan-500/50', bg: 'bg-cyan-500', text: 'text-cyan-400' };
-                                    };
+                                            {/* Decision Badge */}
+                                            <div className={`flex items-center gap-2 px-4 py-2 rounded-full font-bold text-sm shadow-lg transition-transform hover:scale-105 ${isConversion
+                                                ? 'bg-gradient-to-r from-purple-500 to-purple-600 text-white shadow-purple-500/30'
+                                                : 'bg-gradient-to-r from-blue-500 to-blue-600 text-white shadow-blue-500/30'
+                                                }`}>
+                                                <span>{isConversion ? '🔄' : '🛡️'}</span>
+                                                <span className="hidden sm:inline">{analysis.decision}</span>
+                                                <span className="sm:hidden">{isConversion ? 'Convert' : 'Keep'}</span>
+                                            </div>
+                                        </div>
 
-                                    const colors = getStepColor();
+                                        {/* Comparison Cards */}
+                                        <div className="grid sm:grid-cols-2 gap-3 mb-4">
+                                            {/* Value as Preference */}
+                                            <div className={`relative rounded-lg p-4 border ${!isConversion
+                                                ? 'bg-blue-500/10 border-blue-400/30'
+                                                : 'bg-slate-700/30 border-slate-600/30'
+                                                }`}>
+                                                {!isConversion && (
+                                                    <div className="absolute -top-2 -right-2">
+                                                        <span className="bg-blue-500 text-white text-[10px] font-bold px-2 py-0.5 rounded-full shadow-lg">
+                                                            ✓ CHOSEN
+                                                        </span>
+                                                    </div>
+                                                )}
+                                                <div className="flex items-center gap-2 mb-2">
+                                                    <span className="text-lg">🛡️</span>
+                                                    <span className="text-slate-300 text-sm font-medium">Value as Preference</span>
+                                                </div>
+                                                <div className={`font-mono text-xl font-bold ${!isConversion ? 'text-blue-400' : 'text-slate-400'}`}>
+                                                    {formatCurrency(analysis.valueAsPref)}
+                                                </div>
+                                            </div>
 
-                                    // Get icon for step type
-                                    const getStepIcon = () => {
-                                        if (isTotal) return '💰';
-                                        if (step.stepName?.toLowerCase().includes('carve')) return '🎁';
-                                        if (step.stepName?.toLowerCase().includes('pref') || step.stepName?.toLowerCase().includes('liqu')) return '🛡️';
-                                        if (step.isParticipating) return '📊';
-                                        return '💵';
-                                    };
+                                            {/* Value as Converted */}
+                                            <div className={`relative rounded-lg p-4 border ${isConversion
+                                                ? 'bg-purple-500/10 border-purple-400/30'
+                                                : 'bg-slate-700/30 border-slate-600/30'
+                                                }`}>
+                                                {isConversion && (
+                                                    <div className="absolute -top-2 -right-2">
+                                                        <span className="bg-purple-500 text-white text-[10px] font-bold px-2 py-0.5 rounded-full shadow-lg">
+                                                            ✓ CHOSEN
+                                                        </span>
+                                                    </div>
+                                                )}
+                                                <div className="flex items-center gap-2 mb-2">
+                                                    <span className="text-lg">🔄</span>
+                                                    <span className="text-slate-300 text-sm font-medium">Value as Ordinary</span>
+                                                </div>
+                                                <div className={`font-mono text-xl font-bold ${isConversion ? 'text-purple-400' : 'text-slate-400'}`}>
+                                                    {formatCurrency(analysis.valueAsConverted)}
+                                                </div>
+                                            </div>
+                                        </div>
+
+                                        {/* Difference Indicator & Reason */}
+                                        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pt-3 border-t border-slate-600/30">
+                                            {/* Gain/Loss Indicator */}
+                                            <div className={`flex items-center gap-2 px-3 py-1.5 rounded-lg ${difference > 0
+                                                ? 'bg-green-500/20 border border-green-500/30'
+                                                : difference < 0
+                                                    ? 'bg-red-500/20 border border-red-500/30'
+                                                    : 'bg-slate-600/20 border border-slate-500/30'
+                                                }`}>
+                                                <span className={`text-lg ${difference > 0 ? 'text-green-400' : difference < 0 ? 'text-red-400' : 'text-slate-400'}`}>
+                                                    {difference > 0 ? '📈' : difference < 0 ? '📉' : '➖'}
+                                                </span>
+                                                <div>
+                                                    <span className={`font-mono font-bold text-sm ${difference > 0 ? 'text-green-400' : difference < 0 ? 'text-red-400' : 'text-slate-400'
+                                                        }`}>
+                                                        {difference > 0 ? '+' : ''}{formatCurrency(difference)}
+                                                    </span>
+                                                    <span className={`ml-2 text-xs font-medium ${difference > 0 ? 'text-green-400/70' : difference < 0 ? 'text-red-400/70' : 'text-slate-500'
+                                                        }`}>
+                                                        ({percentGain > 0 ? '+' : ''}{percentGain.toFixed(1)}%)
+                                                    </span>
+                                                </div>
+                                            </div>
+
+                                            {/* Reason */}
+                                            <div className="flex items-center gap-2 text-slate-400 text-sm max-w-md">
+                                                <span className="text-amber-400">💡</span>
+                                                <span className="italic">{analysis.reason}</span>
+                                            </div>
+                                        </div>
+                                    </div>
+                                );
+                            })}
+                        </div>
+
+                        {/* Summary Footer */}
+                        <div className="relative mt-6 pt-4 border-t border-slate-700/50">
+                            <div className="flex flex-wrap items-center justify-center gap-6 text-sm">
+                                <div className="flex items-center gap-2">
+                                    <div className="w-3 h-3 rounded-full bg-gradient-to-r from-purple-500 to-purple-600"></div>
+                                    <span className="text-slate-400">Converting to Ordinary:</span>
+                                    <span className="text-white font-bold">
+                                        {conversionAnalysis.filter(a => a.decision === 'Convert to Ordinary').length}
+                                    </span>
+                                </div>
+                                <div className="flex items-center gap-2">
+                                    <div className="w-3 h-3 rounded-full bg-gradient-to-r from-blue-500 to-blue-600"></div>
+                                    <span className="text-slate-400">Keeping Preference:</span>
+                                    <span className="text-white font-bold">
+                                        {conversionAnalysis.filter(a => a.decision === 'Keep Preference').length}
+                                    </span>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                )}
+
+                {/* Sensitivity Analysis Results */}
+                {sensitivityAnalysisEnabled && sensitivityScenarios.length > 0 && (
+                    <div className="bg-white p-6 rounded-xl border border-slate-200 shadow-sm overflow-hidden">
+                        <div className="flex items-center justify-between mb-6">
+                            <h3 className="text-lg font-semibold text-slate-800">
+                                Sensitivity Analysis (Multi-Scenario Comparison)
+                            </h3>
+                            <span className="bg-indigo-100 text-indigo-700 text-xs px-2 py-1 rounded font-medium">
+                                Base: {formatCurrency(effectiveExitValuation)} (+{sensitivityScenarioCount - 1} scenarios)
+                            </span>
+                        </div>
+                        <MultiExitComparison
+                            scenarios={sensitivityScenarios}
+                            capTable={capTable}
+                        />
+                    </div>
+                )}
+
+                {/* Chart */}
+                <div className="bg-white p-6 rounded-xl border border-slate-200 shadow-sm">
+                    <h3 className="text-lg font-semibold text-slate-800 mb-6">Payout Distribution</h3>
+                    <div className="h-80">
+                        <ResponsiveContainer width="100%" height="100%">
+                            <BarChart data={chartData} margin={{ top: 20, right: 30, left: 20, bottom: 5 }}>
+                                <CartesianGrid strokeDasharray="3 3" vertical={false} />
+                                <XAxis dataKey="name" />
+                                <YAxis tickFormatter={(value) => new Intl.NumberFormat('en-US', { notation: "compact", compactDisplay: "short" }).format(value)} />
+                                <RechartsTooltip
+                                    content={({ active, payload, label }) => {
+                                        if (active && payload && payload.length) {
+                                            const data = payload[0].payload;
+                                            const carveOut = data.CarveOut || 0;
+                                            const preference = data.Preference || 0;
+                                            const participation = data.Participation || 0;
+                                            const totalPayout = carveOut + preference + participation;
+                                            const multiple = data.Invested > 0 ? totalPayout / data.Invested : 0;
+
+                                            return (
+                                                <div className="bg-white p-3 border border-slate-200 shadow-lg rounded-lg text-sm z-50">
+                                                    <p className="font-semibold text-slate-900 mb-2">{label}</p>
+
+                                                    {/* Individual components */}
+                                                    {payload.map((entry: any) => (
+                                                        entry.value > 0 && (
+                                                            <div key={entry.name} className="flex items-center justify-between gap-4 mb-1">
+                                                                <div className="flex items-center gap-2">
+                                                                    <div className="w-2 h-2 rounded-full" style={{ backgroundColor: entry.color }} />
+                                                                    <span className="text-slate-600">{entry.name}</span>
+                                                                </div>
+                                                                <span className="font-mono font-medium text-slate-900">{formatCurrency(entry.value)}</span>
+                                                            </div>
+                                                        )
+                                                    ))}
+
+                                                    {/* Total Payout */}
+                                                    <div className="mt-2 pt-2 border-t border-slate-100 flex justify-between items-center gap-4">
+                                                        <span className="text-slate-700 font-medium">Total Payout</span>
+                                                        <span className="font-mono font-bold text-slate-900">{formatCurrency(totalPayout)}</span>
+                                                    </div>
+
+                                                    {/* Invested + Multiple */}
+                                                    <div className="mt-1 flex justify-between items-center gap-4">
+                                                        <span className="text-slate-500">Invested</span>
+                                                        <div className="text-right">
+                                                            <span className="font-mono font-medium text-slate-900">{formatCurrency(data.Invested)}</span>
+                                                            <span className={`ml-1.5 text-xs font-bold ${multiple >= 1 ? 'text-green-600' : 'text-red-500'}`}>
+                                                                ({multiple.toFixed(2)}x)
+                                                            </span>
+                                                        </div>
+                                                    </div>
+                                                </div>
+                                            );
+                                        }
+                                        return null;
+                                    }}
+                                    cursor={{ fill: '#f1f5f9' }}
+                                />
+                                <Legend />
+                                <Bar dataKey="Participation" stackId="a" fill={WATERFALL_COLORS.participation} />
+                                {hasPrefPayouts && <Bar dataKey="Preference" stackId="a" fill={WATERFALL_COLORS.preference} />}
+                                {carveOutPercent > 0 && <Bar dataKey="CarveOut" stackId="a" fill={WATERFALL_COLORS.carveOut} name="Carve-Out" />}
+                            </BarChart>
+                        </ResponsiveContainer>
+                    </div>
+                </div>
+
+                {/* Payout Table */}
+                <div className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
+                    <div className="px-6 py-4 border-b border-slate-200 bg-slate-50 flex justify-between items-center">
+                        <h3 className="text-lg font-semibold text-slate-800">
+                            {earnoutEnabled ? 'Detailed Payouts (Upfront Only)' : 'Detailed Payouts'}
+                        </h3>
+                        {earnoutEnabled && (
+                            <span className="text-xs font-medium px-2 py-1 bg-blue-100 text-blue-700 rounded-full border border-blue-200">
+                                Distribution du cash immédiat (hors Earn-out)
+                            </span>
+                        )}
+                    </div>
+                    <div className="overflow-x-auto">
+                        <table className="w-full text-sm text-left">
+                            <thead className="bg-slate-50 text-slate-500 font-medium border-b border-slate-200">
+                                <tr>
+                                    <th className="px-2 py-2">Shareholder</th>
+                                    <th className="px-2 py-2 text-right whitespace-nowrap">Invested</th>
+                                    {carveOutPercent > 0 && <th className="px-2 py-2 text-right whitespace-nowrap">Carve-Out</th>}
+                                    {hasPrefPayouts && <th className="px-2 py-2 text-right whitespace-nowrap">Preference</th>}
+                                    <th className="px-2 py-2 text-right whitespace-nowrap">Participation</th>
+                                    <th className="px-2 py-2 text-right whitespace-nowrap">Total Payout</th>
+                                    <th className="px-2 py-2 text-right whitespace-nowrap">% of Proceeds</th>
+                                    <th className="px-2 py-2 text-right whitespace-nowrap">Multiple</th>
+                                </tr>
+                            </thead>
+                            <tbody className="divide-y divide-slate-100">
+                                {payouts.map((p) => {
+                                    const totalProceeds = payouts.reduce((sum, payout) => sum + payout.totalPayout, 0);
+                                    const percentOfProceeds = totalProceeds > 0 ? (p.totalPayout / totalProceeds) * 100 : 0;
 
                                     return (
-                                        <React.Fragment key={index}>
-                                            <div
-                                                className={`relative flex gap-4 group ${!isTotal && step.details ? 'cursor-pointer' : ''}`}
-                                                onClick={() => !isTotal && step.details && setExpandedStep(isExpanded ? null : step)}
-                                            >
-                                                {/* Step Indicator */}
-                                                <div className="relative z-10 flex-none">
-                                                    <div className={`w-8 h-8 rounded-full flex items-center justify-center shadow-lg transition-all duration-300 ${isTotal
-                                                        ? `bg-gradient-to-br ${colors.from} ${colors.to} ring-4 ${colors.ring} scale-110`
-                                                        : isExpanded
-                                                            ? `bg-gradient-to-br ${colors.from} ${colors.to} ring-4 ${colors.ring}`
-                                                            : `bg-slate-800 border-2 border-slate-600 group-hover:border-slate-500 group-hover:bg-slate-700`
-                                                        }`}>
-                                                        {isTotal ? (
-                                                            <CheckCircle2 className="w-4 h-4 text-white" />
-                                                        ) : (
-                                                            <span className={`text-sm font-bold transition-colors ${isExpanded ? 'text-white' : 'text-slate-400 group-hover:text-slate-300'}`}>
-                                                                {index + 1}
-                                                            </span>
-                                                        )}
-                                                    </div>
-                                                    {/* Glow effect for total */}
-                                                    {isTotal && (
-                                                        <div className={`absolute inset-0 rounded-full ${colors.bg} blur-md opacity-50 animate-pulse`}></div>
+                                        <tr key={p.shareholderId} className="hover:bg-slate-50 transition-colors">
+                                            <td className="px-2 py-2 font-medium text-slate-900">{p.shareholderName}</td>
+                                            <td className="px-2 py-2 text-right text-slate-500 whitespace-nowrap">{formatCurrency(p.totalInvested)}</td>
+                                            {carveOutPercent > 0 && (
+                                                <td className="px-2 py-2 text-right text-slate-600 font-mono whitespace-nowrap">
+                                                    {p.carveOutPayout > 0 ? formatCurrency(p.carveOutPayout) : '-'}
+                                                </td>
+                                            )}
+                                            {hasPrefPayouts && (
+                                                <td className="px-2 py-2 text-right text-slate-600 font-mono whitespace-nowrap">
+                                                    {p.preferencePayout > 0 ? formatCurrency(p.preferencePayout) : '-'}
+                                                </td>
+                                            )}
+                                            <td className="px-2 py-2 text-right text-slate-600 font-mono whitespace-nowrap">
+                                                {p.participationPayout > 0 ? formatCurrency(p.participationPayout) : '-'}
+                                            </td>
+                                            <td className="px-2 py-2 text-right font-bold text-slate-900 bg-blue-50/30 whitespace-nowrap">
+                                                {formatCurrency(p.totalPayout)}
+                                            </td>
+                                            <td className="px-2 py-2 text-right font-bold text-purple-600 whitespace-nowrap">
+                                                {percentOfProceeds.toFixed(2)}%
+                                            </td>
+                                            <td className={`px-2 py-2 text-right font-bold whitespace-nowrap ${p.multiple >= 1 ? 'text-green-600' : 'text-red-500'}`}>
+                                                {p.multiple.toFixed(2)}x
+                                            </td>
+                                        </tr>
+                                    );
+                                })}
+                                <tr className="bg-slate-900 text-white font-bold">
+                                    <td className="px-2 py-2">TOTAL</td>
+                                    <td className="px-2 py-2 text-right whitespace-nowrap">
+                                        {formatCurrency(payouts.reduce((sum, p) => sum + p.totalInvested, 0))}
+                                    </td>
+                                    {carveOutPercent > 0 && (
+                                        <td className="px-2 py-2 text-right text-slate-300 whitespace-nowrap">
+                                            {formatCurrency(payouts.reduce((sum, p) => sum + p.carveOutPayout, 0))}
+                                        </td>
+                                    )}
+                                    {hasPrefPayouts && (
+                                        <td className="px-2 py-2 text-right text-slate-300 whitespace-nowrap">
+                                            {formatCurrency(payouts.reduce((sum, p) => sum + p.preferencePayout, 0))}
+                                        </td>
+                                    )}
+                                    <td className="px-2 py-2 text-right text-slate-300 whitespace-nowrap">
+                                        {formatCurrency(payouts.reduce((sum, p) => sum + p.participationPayout, 0))}
+                                    </td>
+                                    <td className="px-2 py-2 text-right text-white whitespace-nowrap">
+                                        {formatCurrency(payouts.reduce((sum, p) => sum + p.totalPayout, 0))}
+                                    </td>
+                                    <td className="px-2 py-2 text-right text-purple-300 whitespace-nowrap">
+                                        100.00%
+                                    </td>
+                                    <td className="px-2 py-2 text-right whitespace-nowrap">
+                                        {(payouts.reduce((sum, p) => sum + p.totalPayout, 0) / payouts.reduce((sum, p) => sum + p.totalInvested, 0)).toFixed(2)}x
+                                    </td>
+                                </tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+
+                {/* Waterfall Steps - Premium Redesign */}
+                <div className="bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900 rounded-2xl shadow-2xl border border-slate-700/50 overflow-hidden relative">
+                    {/* Animated Background */}
+                    <div className="absolute inset-0 overflow-hidden">
+                        <div className="absolute -top-1/2 -right-1/2 w-full h-full bg-gradient-to-br from-blue-500/10 via-transparent to-transparent rounded-full blur-3xl"></div>
+                        <div className="absolute -bottom-1/2 -left-1/2 w-full h-full bg-gradient-to-tr from-emerald-500/10 via-transparent to-transparent rounded-full blur-3xl"></div>
+                    </div>
+
+                    {/* Header */}
+                    <div className="relative px-6 py-5 border-b border-slate-700/50 flex items-center justify-between">
+                        <div className="flex items-center gap-4">
+                            <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-blue-500 to-cyan-400 flex items-center justify-center shadow-lg shadow-blue-500/25">
+                                <Layers className="w-6 h-6 text-white" />
+                            </div>
+                            <div>
+                                <h3 className="text-xl font-bold text-white">Distribution Waterfall</h3>
+                                <p className="text-slate-400 text-sm">Step-by-step proceeds allocation</p>
+                            </div>
+                        </div>
+                        <div className="hidden sm:flex items-center gap-3">
+                            <div className="flex items-center gap-2 px-3 py-1.5 rounded-full bg-emerald-500/20 border border-emerald-500/30">
+                                <div className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></div>
+                                <span className="text-xs text-emerald-300 font-medium">{steps.length} Steps</span>
+                            </div>
+                            <div className="px-3 py-1.5 rounded-full bg-slate-700/50 border border-slate-600">
+                                <span className="text-xs text-slate-300 font-mono">{formatCurrency(exitValuation)} Exit</span>
+                            </div>
+                        </div>
+                    </div>
+
+                    {/* Waterfall Content */}
+                    <div className="relative p-6">
+                        {/* Progress Bar Background */}
+                        <div className="absolute left-10 top-8 bottom-8 w-1 bg-gradient-to-b from-blue-500/50 via-purple-500/50 to-emerald-500/50 rounded-full"></div>
+
+                        <div className="space-y-4">
+                            {steps.map((step, index) => {
+                                const isTotal = step.isTotal;
+                                const isExpanded = expandedStep?.stepNumber === step.stepNumber;
+                                // Note: progressPercent could be used for a visual progress indicator
+
+                                // Determine step type for styling
+                                const getStepColor = () => {
+                                    if (isTotal) return { from: 'from-emerald-500', to: 'to-emerald-400', ring: 'ring-emerald-500/50', bg: 'bg-emerald-500', text: 'text-emerald-400' };
+                                    if (step.stepName?.toLowerCase().includes('carve')) return { from: 'from-amber-500', to: 'to-orange-400', ring: 'ring-amber-500/50', bg: 'bg-amber-500', text: 'text-amber-400' };
+                                    if (step.stepName?.toLowerCase().includes('pref') || step.stepName?.toLowerCase().includes('liqu')) return { from: 'from-blue-500', to: 'to-blue-400', ring: 'ring-blue-500/50', bg: 'bg-blue-500', text: 'text-blue-400' };
+                                    if (step.isParticipating) return { from: 'from-purple-500', to: 'to-purple-400', ring: 'ring-purple-500/50', bg: 'bg-purple-500', text: 'text-purple-400' };
+                                    return { from: 'from-cyan-500', to: 'to-cyan-400', ring: 'ring-cyan-500/50', bg: 'bg-cyan-500', text: 'text-cyan-400' };
+                                };
+
+                                const colors = getStepColor();
+
+                                // Get icon for step type
+                                const getStepIcon = () => {
+                                    if (isTotal) return '💰';
+                                    if (step.stepName?.toLowerCase().includes('carve')) return '🎁';
+                                    if (step.stepName?.toLowerCase().includes('pref') || step.stepName?.toLowerCase().includes('liqu')) return '🛡️';
+                                    if (step.isParticipating) return '📊';
+                                    return '💵';
+                                };
+
+                                return (
+                                    <React.Fragment key={index}>
+                                        <div
+                                            className={`relative flex gap-4 group ${!isTotal && step.details ? 'cursor-pointer' : ''}`}
+                                            onClick={() => !isTotal && step.details && setExpandedStep(isExpanded ? null : step)}
+                                        >
+                                            {/* Step Indicator */}
+                                            <div className="relative z-10 flex-none">
+                                                <div className={`w-8 h-8 rounded-full flex items-center justify-center shadow-lg transition-all duration-300 ${isTotal
+                                                    ? `bg-gradient-to-br ${colors.from} ${colors.to} ring-4 ${colors.ring} scale-110`
+                                                    : isExpanded
+                                                        ? `bg-gradient-to-br ${colors.from} ${colors.to} ring-4 ${colors.ring}`
+                                                        : `bg-slate-800 border-2 border-slate-600 group-hover:border-slate-500 group-hover:bg-slate-700`
+                                                    }`}>
+                                                    {isTotal ? (
+                                                        <CheckCircle2 className="w-4 h-4 text-white" />
+                                                    ) : (
+                                                        <span className={`text-sm font-bold transition-colors ${isExpanded ? 'text-white' : 'text-slate-400 group-hover:text-slate-300'}`}>
+                                                            {index + 1}
+                                                        </span>
                                                     )}
                                                 </div>
+                                                {/* Glow effect for total */}
+                                                {isTotal && (
+                                                    <div className={`absolute inset-0 rounded-full ${colors.bg} blur-md opacity-50 animate-pulse`}></div>
+                                                )}
+                                            </div>
 
-                                                {/* Step Content Card */}
-                                                <div className={`flex-1 rounded-xl border transition-all duration-300 overflow-hidden ${isTotal
-                                                    ? 'bg-gradient-to-r from-emerald-500/20 via-emerald-500/10 to-transparent border-emerald-500/40 shadow-lg shadow-emerald-500/10'
-                                                    : isExpanded
-                                                        ? 'bg-slate-800/80 border-slate-600 shadow-lg'
-                                                        : 'bg-slate-800/50 border-slate-700/50 hover:border-slate-600 hover:bg-slate-800/80'
-                                                    }`}>
-                                                    <div className="p-4">
-                                                        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-                                                            {/* Left side - Step Info */}
-                                                            <div className="flex items-center gap-3 min-w-0">
-                                                                <span className="text-xl flex-shrink-0">{getStepIcon()}</span>
-                                                                <div className="min-w-0">
-                                                                    <h4 className={`font-bold text-sm truncate ${isTotal ? 'text-emerald-300' : 'text-white'}`}>
-                                                                        {step.stepName}
-                                                                    </h4>
-                                                                    <p className="text-xs text-slate-400 truncate mt-0.5">
-                                                                        {step.description}
-                                                                    </p>
-                                                                </div>
-                                                            </div>
-
-                                                            {/* Right side - Amount & Remaining */}
-                                                            <div className="flex items-center gap-4 flex-shrink-0">
-                                                                {/* Distribution Amount */}
-                                                                <div className={`px-4 py-2 rounded-lg ${isTotal
-                                                                    ? 'bg-emerald-500/20 border border-emerald-500/30'
-                                                                    : 'bg-slate-700/50 border border-slate-600/50'
-                                                                    }`}>
-                                                                    <div className="text-[10px] text-slate-400 uppercase tracking-wider mb-0.5">
-                                                                        {isTotal ? 'Total Distributed' : 'Distribution'}
-                                                                    </div>
-                                                                    <div className={`font-mono text-base font-bold ${isTotal ? 'text-emerald-400' : colors.text}`}>
-                                                                        {formatCurrency(step.amount)}
-                                                                    </div>
-                                                                </div>
-
-                                                                {/* Remaining Balance */}
-                                                                {!isTotal && (
-                                                                    <div className="hidden lg:block px-4 py-2 rounded-lg bg-slate-900/50 border border-slate-700/50">
-                                                                        <div className="text-[10px] text-slate-500 uppercase tracking-wider mb-0.5">Remaining</div>
-                                                                        <div className="font-mono text-base font-medium text-slate-400">
-                                                                            {formatCurrency(step.remainingBalance)}
-                                                                        </div>
-                                                                    </div>
-                                                                )}
-
-                                                                {/* Expand Indicator */}
-                                                                {!isTotal && step.details && (
-                                                                    <div className={`w-8 h-8 rounded-lg flex items-center justify-center transition-all duration-300 ${isExpanded
-                                                                        ? 'bg-slate-700 rotate-180'
-                                                                        : 'bg-slate-800 group-hover:bg-slate-700'
-                                                                        }`}>
-                                                                        <ChevronDown className="w-4 h-4 text-slate-400" />
-                                                                    </div>
-                                                                )}
+                                            {/* Step Content Card */}
+                                            <div className={`flex-1 rounded-xl border transition-all duration-300 overflow-hidden ${isTotal
+                                                ? 'bg-gradient-to-r from-emerald-500/20 via-emerald-500/10 to-transparent border-emerald-500/40 shadow-lg shadow-emerald-500/10'
+                                                : isExpanded
+                                                    ? 'bg-slate-800/80 border-slate-600 shadow-lg'
+                                                    : 'bg-slate-800/50 border-slate-700/50 hover:border-slate-600 hover:bg-slate-800/80'
+                                                }`}>
+                                                <div className="p-4">
+                                                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                                                        {/* Left side - Step Info */}
+                                                        <div className="flex items-center gap-3 min-w-0">
+                                                            <span className="text-xl flex-shrink-0">{getStepIcon()}</span>
+                                                            <div className="min-w-0">
+                                                                <h4 className={`font-bold text-sm truncate ${isTotal ? 'text-emerald-300' : 'text-white'}`}>
+                                                                    {step.stepName}
+                                                                </h4>
+                                                                <p className="text-xs text-slate-400 truncate mt-0.5">
+                                                                    {step.description}
+                                                                </p>
                                                             </div>
                                                         </div>
 
-                                                        {/* Progress bar for remaining */}
-                                                        {!isTotal && (
-                                                            <div className="mt-3 pt-3 border-t border-slate-700/30">
-                                                                <div className="flex items-center justify-between text-[10px] text-slate-500 mb-1">
-                                                                    <span>Proceeds allocated at this step</span>
-                                                                    <span className="font-mono">{((step.amount / exitValuation) * 100).toFixed(1)}%</span>
+                                                        {/* Right side - Amount & Remaining */}
+                                                        <div className="flex items-center gap-4 flex-shrink-0">
+                                                            {/* Distribution Amount */}
+                                                            <div className={`px-4 py-2 rounded-lg ${isTotal
+                                                                ? 'bg-emerald-500/20 border border-emerald-500/30'
+                                                                : 'bg-slate-700/50 border border-slate-600/50'
+                                                                }`}>
+                                                                <div className="text-[10px] text-slate-400 uppercase tracking-wider mb-0.5">
+                                                                    {isTotal ? 'Total Distributed' : 'Distribution'}
                                                                 </div>
-                                                                <div className="h-1.5 bg-slate-700 rounded-full overflow-hidden">
-                                                                    <div
-                                                                        className={`h-full rounded-full bg-gradient-to-r ${colors.from} ${colors.to} transition-all duration-500`}
-                                                                        style={{ width: `${Math.min((step.amount / exitValuation) * 100, 100)}%` }}
-                                                                    ></div>
+                                                                <div className={`font-mono text-base font-bold ${isTotal ? 'text-emerald-400' : colors.text}`}>
+                                                                    {formatCurrency(step.amount)}
+                                                                </div>
+                                                            </div>
+
+                                                            {/* Remaining Balance */}
+                                                            {!isTotal && (
+                                                                <div className="hidden lg:block px-4 py-2 rounded-lg bg-slate-900/50 border border-slate-700/50">
+                                                                    <div className="text-[10px] text-slate-500 uppercase tracking-wider mb-0.5">Remaining</div>
+                                                                    <div className="font-mono text-base font-medium text-slate-400">
+                                                                        {formatCurrency(step.remainingBalance)}
+                                                                    </div>
+                                                                </div>
+                                                            )}
+
+                                                            {/* Expand Indicator */}
+                                                            {!isTotal && step.details && (
+                                                                <div className={`w-8 h-8 rounded-lg flex items-center justify-center transition-all duration-300 ${isExpanded
+                                                                    ? 'bg-slate-700 rotate-180'
+                                                                    : 'bg-slate-800 group-hover:bg-slate-700'
+                                                                    }`}>
+                                                                    <ChevronDown className="w-4 h-4 text-slate-400" />
+                                                                </div>
+                                                            )}
+                                                        </div>
+                                                    </div>
+
+                                                    {/* Progress bar for remaining */}
+                                                    {!isTotal && (
+                                                        <div className="mt-3 pt-3 border-t border-slate-700/30">
+                                                            <div className="flex items-center justify-between text-[10px] text-slate-500 mb-1">
+                                                                <span>Proceeds allocated at this step</span>
+                                                                <span className="font-mono">{((step.amount / exitValuation) * 100).toFixed(1)}%</span>
+                                                            </div>
+                                                            <div className="h-1.5 bg-slate-700 rounded-full overflow-hidden">
+                                                                <div
+                                                                    className={`h-full rounded-full bg-gradient-to-r ${colors.from} ${colors.to} transition-all duration-500`}
+                                                                    style={{ width: `${Math.min((step.amount / exitValuation) * 100, 100)}%` }}
+                                                                ></div>
+                                                            </div>
+                                                        </div>
+                                                    )}
+                                                </div>
+                                            </div>
+                                        </div>
+
+                                        {/* Expanded Details Panel */}
+                                        {isExpanded && expandedStep && (
+                                            <div className="ml-12 mt-2 mb-2 animate-in fade-in slide-in-from-top-2 duration-300">
+                                                <div className="bg-slate-800/80 backdrop-blur-sm rounded-xl border border-slate-700/50 overflow-hidden">
+                                                    {/* Panel Header */}
+                                                    <div className="px-5 py-4 border-b border-slate-700/50 bg-slate-800/50">
+                                                        <div className="flex items-center justify-between">
+                                                            <div className="flex items-center gap-3">
+                                                                <div className={`w-10 h-10 rounded-lg bg-gradient-to-br ${colors.from} ${colors.to} flex items-center justify-center`}>
+                                                                    <span className="text-lg">{getStepIcon()}</span>
+                                                                </div>
+                                                                <div>
+                                                                    <h3 className="text-lg font-bold text-white">{expandedStep.stepName}</h3>
+                                                                    <p className="text-sm text-slate-400">{expandedStep.description}</p>
+                                                                </div>
+                                                            </div>
+                                                            <button
+                                                                onClick={(e) => {
+                                                                    e.stopPropagation();
+                                                                    setExpandedStep(null);
+                                                                }}
+                                                                className="p-2 hover:bg-slate-700 rounded-lg transition-colors text-slate-400 hover:text-white"
+                                                            >
+                                                                <X className="w-5 h-5" />
+                                                            </button>
+                                                        </div>
+                                                    </div>
+
+                                                    {/* Panel Content */}
+                                                    <div className="p-5">
+                                                        {/* Calculation Method Card - for Catchup */}
+                                                        {expandedStep.details?.calculation?.type === 'Catchup' && (
+                                                            <div className="mb-5 p-4 rounded-xl bg-gradient-to-r from-blue-500/10 via-blue-500/5 to-transparent border border-blue-500/30">
+                                                                <div className="flex items-center justify-between mb-3">
+                                                                    <div className="flex items-center gap-2">
+                                                                        <span className="text-lg">📐</span>
+                                                                        <span className="text-sm font-bold text-blue-300">Méthode de calcul (Catch-up Pro-rata)</span>
+                                                                    </div>
+                                                                    <span className="text-[10px] font-bold px-2 py-1 bg-emerald-500/20 text-emerald-400 rounded-full border border-emerald-500/30">
+                                                                        ✓ Fully Diluted
+                                                                    </span>
+                                                                </div>
+                                                                <div className="text-sm font-mono text-slate-300 bg-slate-900/50 p-3 rounded-lg border border-slate-700/50">
+                                                                    Montant = (Actions FD actionnaire / Total actions FD éligibles) × Proceeds à distribuer
+                                                                </div>
+                                                                <div className="mt-3 text-xs text-blue-300/70 flex items-center gap-2">
+                                                                    <span>💡</span>
+                                                                    <span className="italic">Les options sont converties en actions ordinaires au moment de l'exit</span>
+                                                                </div>
+                                                                <div className="mt-4 grid grid-cols-3 gap-3">
+                                                                    <div className="bg-slate-900/50 rounded-lg p-3 border border-slate-700/50">
+                                                                        <div className="text-[10px] text-blue-400 uppercase tracking-wider mb-1">Total Actions FD</div>
+                                                                        <div className="font-mono font-bold text-white">
+                                                                            {expandedStep.details.calculation.totalEligibleShares?.toLocaleString() || 'N/A'}
+                                                                        </div>
+                                                                    </div>
+                                                                    <div className="bg-slate-900/50 rounded-lg p-3 border border-slate-700/50">
+                                                                        <div className="text-[10px] text-blue-400 uppercase tracking-wider mb-1">Montant à Distribuer</div>
+                                                                        <div className="font-mono font-bold text-white">
+                                                                            {expandedStep.details.calculation.distributableAmount
+                                                                                ? formatCurrency(expandedStep.details.calculation.distributableAmount)
+                                                                                : 'N/A'}
+                                                                        </div>
+                                                                    </div>
+                                                                    <div className="bg-slate-900/50 rounded-lg p-3 border border-slate-700/50">
+                                                                        <div className="text-[10px] text-blue-400 uppercase tracking-wider mb-1">Classe d'actions</div>
+                                                                        <div className="font-mono font-bold text-white">
+                                                                            {expandedStep.details.calculation.shareClass || 'N/A'}
+                                                                        </div>
+                                                                    </div>
+                                                                </div>
+                                                            </div>
+                                                        )}
+
+                                                        {/* Shareholder Breakdown */}
+                                                        <div>
+                                                            <h4 className="text-sm font-bold text-white mb-3 flex items-center gap-2">
+                                                                <span>👥</span> Shareholder Breakdown
+                                                            </h4>
+
+                                                            <div className="bg-slate-900/50 rounded-xl border border-slate-700/50 overflow-hidden">
+                                                                <table className="w-full text-sm">
+                                                                    <thead>
+                                                                        <tr className="border-b border-slate-700/50">
+                                                                            <th className="px-4 py-3 text-left text-xs font-semibold text-slate-400 uppercase tracking-wider">Shareholder</th>
+                                                                            {expandedStep.details?.calculation?.type === 'Catchup' && (
+                                                                                <>
+                                                                                    <th className="px-4 py-3 text-right text-xs font-semibold text-slate-400 uppercase tracking-wider">Actions FD</th>
+                                                                                    <th className="px-4 py-3 text-right text-xs font-semibold text-slate-400 uppercase tracking-wider">% du Pool</th>
+                                                                                    <th className="px-4 py-3 text-left text-xs font-semibold text-slate-400 uppercase tracking-wider">Formule</th>
+                                                                                </>
+                                                                            )}
+                                                                            <th className="px-4 py-3 text-right text-xs font-semibold text-slate-400 uppercase tracking-wider">Amount</th>
+                                                                        </tr>
+                                                                    </thead>
+                                                                    <tbody className="divide-y divide-slate-700/30">
+                                                                        {expandedStep.details?.shareholders.map((s) => (
+                                                                            <tr key={s.id} className="hover:bg-slate-700/20 transition-colors">
+                                                                                <td className="px-4 py-3">
+                                                                                    <div className="flex items-center gap-2">
+                                                                                        <div className="w-7 h-7 rounded-full bg-gradient-to-br from-slate-600 to-slate-700 flex items-center justify-center text-xs font-bold text-slate-300">
+                                                                                            {s.name.charAt(0).toUpperCase()}
+                                                                                        </div>
+                                                                                        <span className="font-medium text-white">{s.name}</span>
+                                                                                    </div>
+                                                                                </td>
+                                                                                {expandedStep.details?.calculation?.type === 'Catchup' && s.calculation && (
+                                                                                    <>
+                                                                                        <td className="px-4 py-3 text-right">
+                                                                                            {s.calculation.optionsConverted && s.calculation.optionsConverted > 0 ? (
+                                                                                                <div className="text-right">
+                                                                                                    <span className="font-mono font-bold text-white">{s.calculation.shares.toLocaleString()}</span>
+                                                                                                    <div className="text-[10px] text-slate-500">
+                                                                                                        ({s.calculation.ordinaryShares?.toLocaleString()} + {s.calculation.optionsConverted.toLocaleString()} opts)
+                                                                                                    </div>
+                                                                                                </div>
+                                                                                            ) : (
+                                                                                                <span className="font-mono text-slate-300">{s.calculation.shares.toLocaleString()}</span>
+                                                                                            )}
+                                                                                        </td>
+                                                                                        <td className="px-4 py-3 text-right">
+                                                                                            <span className="font-mono text-slate-300">{s.calculation.percentage.toFixed(2)}%</span>
+                                                                                        </td>
+                                                                                        <td className="px-4 py-3">
+                                                                                            <span className="text-xs font-mono bg-slate-700/50 px-2 py-1 rounded text-slate-400">
+                                                                                                {s.calculation.formula}
+                                                                                            </span>
+                                                                                        </td>
+                                                                                    </>
+                                                                                )}
+                                                                                <td className="px-4 py-3 text-right">
+                                                                                    <span className={`font-mono font-bold ${colors.text}`}>
+                                                                                        {formatCurrency(s.amount)}
+                                                                                    </span>
+                                                                                </td>
+                                                                            </tr>
+                                                                        ))}
+                                                                        {(!expandedStep.details?.shareholders || expandedStep.details.shareholders.length === 0) && (
+                                                                            <tr>
+                                                                                <td colSpan={expandedStep.details?.calculation?.type === 'Catchup' ? 5 : 2} className="px-4 py-6 text-center text-slate-500 italic">
+                                                                                    No specific shareholder breakdown available.
+                                                                                </td>
+                                                                            </tr>
+                                                                        )}
+                                                                    </tbody>
+                                                                    <tfoot>
+                                                                        <tr className="bg-slate-800/50 border-t border-slate-600/50">
+                                                                            <td className="px-4 py-3 font-bold text-white">Total</td>
+                                                                            {expandedStep.details?.calculation?.type === 'Catchup' && (
+                                                                                <>
+                                                                                    <td className="px-4 py-3 text-right font-mono text-slate-400">
+                                                                                        {expandedStep.details.calculation.totalShares?.toLocaleString()}
+                                                                                    </td>
+                                                                                    <td className="px-4 py-3 text-right font-mono text-slate-400">100%</td>
+                                                                                    <td></td>
+                                                                                </>
+                                                                            )}
+                                                                            <td className="px-4 py-3 text-right">
+                                                                                <span className={`font-mono font-bold text-lg ${colors.text}`}>
+                                                                                    {formatCurrency(expandedStep.amount)}
+                                                                                </span>
+                                                                            </td>
+                                                                        </tr>
+                                                                    </tfoot>
+                                                                </table>
+                                                            </div>
+
+                                                            {/* Verification note */}
+                                                            {expandedStep.details?.calculation?.type === 'Catchup' && (
+                                                                <div className="mt-3 text-xs text-slate-400 flex items-center gap-2 px-3">
+                                                                    <span className="text-emerald-400">✓</span>
+                                                                    <span>Vérification: {expandedStep.details.calculation.formula}</span>
+                                                                </div>
+                                                            )}
+                                                        </div>
+
+                                                        {/* Calculation Details for non-Catchup */}
+                                                        {expandedStep.details?.calculation && expandedStep.details.calculation.type !== 'Catchup' && (
+                                                            <div className="mt-5 p-4 rounded-xl bg-slate-900/50 border border-slate-700/50">
+                                                                <h4 className="text-sm font-bold text-white mb-3 flex items-center gap-2">
+                                                                    <span>📊</span> Calculation Details
+                                                                </h4>
+                                                                <div className="grid grid-cols-2 gap-3">
+                                                                    {expandedStep.details.calculation.valuation !== undefined && (
+                                                                        <div className="bg-slate-800/50 rounded-lg p-3 border border-slate-700/30">
+                                                                            <div className="text-[10px] text-slate-500 uppercase tracking-wider mb-1">Valuation</div>
+                                                                            <div className="font-mono font-bold text-white">{formatCurrency(expandedStep.details.calculation.valuation)}</div>
+                                                                        </div>
+                                                                    )}
+                                                                    {expandedStep.details.calculation.pricePerShare !== undefined && (
+                                                                        <div className="bg-slate-800/50 rounded-lg p-3 border border-slate-700/30">
+                                                                            <div className="text-[10px] text-slate-500 uppercase tracking-wider mb-1">Price per Share</div>
+                                                                            <div className="font-mono font-bold text-white">{formatCurrency(expandedStep.details.calculation.pricePerShare)}</div>
+                                                                        </div>
+                                                                    )}
+                                                                    {expandedStep.details.calculation.preferenceMultiple !== undefined && (
+                                                                        <div className="bg-slate-800/50 rounded-lg p-3 border border-slate-700/30">
+                                                                            <div className="text-[10px] text-slate-500 uppercase tracking-wider mb-1">Pref Multiple</div>
+                                                                            <div className="font-mono font-bold text-white">{expandedStep.details.calculation.preferenceMultiple}x</div>
+                                                                        </div>
+                                                                    )}
+                                                                    {expandedStep.details.calculation.type && (
+                                                                        <div className="bg-slate-800/50 rounded-lg p-3 border border-slate-700/30">
+                                                                            <div className="text-[10px] text-slate-500 uppercase tracking-wider mb-1">Type</div>
+                                                                            <div className="font-mono font-bold text-white">{expandedStep.details.calculation.type}</div>
+                                                                        </div>
+                                                                    )}
+                                                                    {expandedStep.details.calculation.shareClass && (
+                                                                        <div className="bg-slate-800/50 rounded-lg p-3 border border-slate-700/30">
+                                                                            <div className="text-[10px] text-slate-500 uppercase tracking-wider mb-1">Share Class</div>
+                                                                            <div className="font-mono font-bold text-white">{expandedStep.details.calculation.shareClass}</div>
+                                                                        </div>
+                                                                    )}
+                                                                    {expandedStep.details.calculation.investedAmount !== undefined && (
+                                                                        <>
+                                                                            <div className="bg-slate-800/50 rounded-lg p-3 border border-slate-700/30">
+                                                                                <div className="text-[10px] text-slate-500 uppercase tracking-wider mb-1">Total Invested</div>
+                                                                                <div className="font-mono font-bold text-white">{formatCurrency(expandedStep.details.calculation.investedAmount)}</div>
+                                                                            </div>
+                                                                            <div className="col-span-2 bg-gradient-to-r from-blue-500/10 via-blue-500/5 to-transparent rounded-lg p-3 border border-blue-500/30">
+                                                                                <div className="text-[10px] text-blue-400 uppercase tracking-wider mb-1">Calculation Formula</div>
+                                                                                <div className="font-mono text-sm text-white">
+                                                                                    {formatCurrency(expandedStep.details.calculation.investedAmount)} × {expandedStep.details.calculation.preferenceMultiple}x = <span className={colors.text}>{formatCurrency(expandedStep.amount)}</span>
+                                                                                </div>
+                                                                            </div>
+                                                                        </>
+                                                                    )}
                                                                 </div>
                                                             </div>
                                                         )}
                                                     </div>
                                                 </div>
                                             </div>
-
-                                            {/* Expanded Details Panel */}
-                                            {isExpanded && expandedStep && (
-                                                <div className="ml-12 mt-2 mb-2 animate-in fade-in slide-in-from-top-2 duration-300">
-                                                    <div className="bg-slate-800/80 backdrop-blur-sm rounded-xl border border-slate-700/50 overflow-hidden">
-                                                        {/* Panel Header */}
-                                                        <div className="px-5 py-4 border-b border-slate-700/50 bg-slate-800/50">
-                                                            <div className="flex items-center justify-between">
-                                                                <div className="flex items-center gap-3">
-                                                                    <div className={`w-10 h-10 rounded-lg bg-gradient-to-br ${colors.from} ${colors.to} flex items-center justify-center`}>
-                                                                        <span className="text-lg">{getStepIcon()}</span>
-                                                                    </div>
-                                                                    <div>
-                                                                        <h3 className="text-lg font-bold text-white">{expandedStep.stepName}</h3>
-                                                                        <p className="text-sm text-slate-400">{expandedStep.description}</p>
-                                                                    </div>
-                                                                </div>
-                                                                <button
-                                                                    onClick={(e) => {
-                                                                        e.stopPropagation();
-                                                                        setExpandedStep(null);
-                                                                    }}
-                                                                    className="p-2 hover:bg-slate-700 rounded-lg transition-colors text-slate-400 hover:text-white"
-                                                                >
-                                                                    <X className="w-5 h-5" />
-                                                                </button>
-                                                            </div>
-                                                        </div>
-
-                                                        {/* Panel Content */}
-                                                        <div className="p-5">
-                                                            {/* Calculation Method Card - for Catchup */}
-                                                            {expandedStep.details?.calculation?.type === 'Catchup' && (
-                                                                <div className="mb-5 p-4 rounded-xl bg-gradient-to-r from-blue-500/10 via-blue-500/5 to-transparent border border-blue-500/30">
-                                                                    <div className="flex items-center justify-between mb-3">
-                                                                        <div className="flex items-center gap-2">
-                                                                            <span className="text-lg">📐</span>
-                                                                            <span className="text-sm font-bold text-blue-300">Méthode de calcul (Catch-up Pro-rata)</span>
-                                                                        </div>
-                                                                        <span className="text-[10px] font-bold px-2 py-1 bg-emerald-500/20 text-emerald-400 rounded-full border border-emerald-500/30">
-                                                                            ✓ Fully Diluted
-                                                                        </span>
-                                                                    </div>
-                                                                    <div className="text-sm font-mono text-slate-300 bg-slate-900/50 p-3 rounded-lg border border-slate-700/50">
-                                                                        Montant = (Actions FD actionnaire / Total actions FD éligibles) × Proceeds à distribuer
-                                                                    </div>
-                                                                    <div className="mt-3 text-xs text-blue-300/70 flex items-center gap-2">
-                                                                        <span>💡</span>
-                                                                        <span className="italic">Les options sont converties en actions ordinaires au moment de l'exit</span>
-                                                                    </div>
-                                                                    <div className="mt-4 grid grid-cols-3 gap-3">
-                                                                        <div className="bg-slate-900/50 rounded-lg p-3 border border-slate-700/50">
-                                                                            <div className="text-[10px] text-blue-400 uppercase tracking-wider mb-1">Total Actions FD</div>
-                                                                            <div className="font-mono font-bold text-white">
-                                                                                {expandedStep.details.calculation.totalEligibleShares?.toLocaleString() || 'N/A'}
-                                                                            </div>
-                                                                        </div>
-                                                                        <div className="bg-slate-900/50 rounded-lg p-3 border border-slate-700/50">
-                                                                            <div className="text-[10px] text-blue-400 uppercase tracking-wider mb-1">Montant à Distribuer</div>
-                                                                            <div className="font-mono font-bold text-white">
-                                                                                {expandedStep.details.calculation.distributableAmount
-                                                                                    ? formatCurrency(expandedStep.details.calculation.distributableAmount)
-                                                                                    : 'N/A'}
-                                                                            </div>
-                                                                        </div>
-                                                                        <div className="bg-slate-900/50 rounded-lg p-3 border border-slate-700/50">
-                                                                            <div className="text-[10px] text-blue-400 uppercase tracking-wider mb-1">Classe d'actions</div>
-                                                                            <div className="font-mono font-bold text-white">
-                                                                                {expandedStep.details.calculation.shareClass || 'N/A'}
-                                                                            </div>
-                                                                        </div>
-                                                                    </div>
-                                                                </div>
-                                                            )}
-
-                                                            {/* Shareholder Breakdown */}
-                                                            <div>
-                                                                <h4 className="text-sm font-bold text-white mb-3 flex items-center gap-2">
-                                                                    <span>👥</span> Shareholder Breakdown
-                                                                </h4>
-
-                                                                <div className="bg-slate-900/50 rounded-xl border border-slate-700/50 overflow-hidden">
-                                                                    <table className="w-full text-sm">
-                                                                        <thead>
-                                                                            <tr className="border-b border-slate-700/50">
-                                                                                <th className="px-4 py-3 text-left text-xs font-semibold text-slate-400 uppercase tracking-wider">Shareholder</th>
-                                                                                {expandedStep.details?.calculation?.type === 'Catchup' && (
-                                                                                    <>
-                                                                                        <th className="px-4 py-3 text-right text-xs font-semibold text-slate-400 uppercase tracking-wider">Actions FD</th>
-                                                                                        <th className="px-4 py-3 text-right text-xs font-semibold text-slate-400 uppercase tracking-wider">% du Pool</th>
-                                                                                        <th className="px-4 py-3 text-left text-xs font-semibold text-slate-400 uppercase tracking-wider">Formule</th>
-                                                                                    </>
-                                                                                )}
-                                                                                <th className="px-4 py-3 text-right text-xs font-semibold text-slate-400 uppercase tracking-wider">Amount</th>
-                                                                            </tr>
-                                                                        </thead>
-                                                                        <tbody className="divide-y divide-slate-700/30">
-                                                                            {expandedStep.details?.shareholders.map((s) => (
-                                                                                <tr key={s.id} className="hover:bg-slate-700/20 transition-colors">
-                                                                                    <td className="px-4 py-3">
-                                                                                        <div className="flex items-center gap-2">
-                                                                                            <div className="w-7 h-7 rounded-full bg-gradient-to-br from-slate-600 to-slate-700 flex items-center justify-center text-xs font-bold text-slate-300">
-                                                                                                {s.name.charAt(0).toUpperCase()}
-                                                                                            </div>
-                                                                                            <span className="font-medium text-white">{s.name}</span>
-                                                                                        </div>
-                                                                                    </td>
-                                                                                    {expandedStep.details?.calculation?.type === 'Catchup' && s.calculation && (
-                                                                                        <>
-                                                                                            <td className="px-4 py-3 text-right">
-                                                                                                {s.calculation.optionsConverted && s.calculation.optionsConverted > 0 ? (
-                                                                                                    <div className="text-right">
-                                                                                                        <span className="font-mono font-bold text-white">{s.calculation.shares.toLocaleString()}</span>
-                                                                                                        <div className="text-[10px] text-slate-500">
-                                                                                                            ({s.calculation.ordinaryShares?.toLocaleString()} + {s.calculation.optionsConverted.toLocaleString()} opts)
-                                                                                                        </div>
-                                                                                                    </div>
-                                                                                                ) : (
-                                                                                                    <span className="font-mono text-slate-300">{s.calculation.shares.toLocaleString()}</span>
-                                                                                                )}
-                                                                                            </td>
-                                                                                            <td className="px-4 py-3 text-right">
-                                                                                                <span className="font-mono text-slate-300">{s.calculation.percentage.toFixed(2)}%</span>
-                                                                                            </td>
-                                                                                            <td className="px-4 py-3">
-                                                                                                <span className="text-xs font-mono bg-slate-700/50 px-2 py-1 rounded text-slate-400">
-                                                                                                    {s.calculation.formula}
-                                                                                                </span>
-                                                                                            </td>
-                                                                                        </>
-                                                                                    )}
-                                                                                    <td className="px-4 py-3 text-right">
-                                                                                        <span className={`font-mono font-bold ${colors.text}`}>
-                                                                                            {formatCurrency(s.amount)}
-                                                                                        </span>
-                                                                                    </td>
-                                                                                </tr>
-                                                                            ))}
-                                                                            {(!expandedStep.details?.shareholders || expandedStep.details.shareholders.length === 0) && (
-                                                                                <tr>
-                                                                                    <td colSpan={expandedStep.details?.calculation?.type === 'Catchup' ? 5 : 2} className="px-4 py-6 text-center text-slate-500 italic">
-                                                                                        No specific shareholder breakdown available.
-                                                                                    </td>
-                                                                                </tr>
-                                                                            )}
-                                                                        </tbody>
-                                                                        <tfoot>
-                                                                            <tr className="bg-slate-800/50 border-t border-slate-600/50">
-                                                                                <td className="px-4 py-3 font-bold text-white">Total</td>
-                                                                                {expandedStep.details?.calculation?.type === 'Catchup' && (
-                                                                                    <>
-                                                                                        <td className="px-4 py-3 text-right font-mono text-slate-400">
-                                                                                            {expandedStep.details.calculation.totalShares?.toLocaleString()}
-                                                                                        </td>
-                                                                                        <td className="px-4 py-3 text-right font-mono text-slate-400">100%</td>
-                                                                                        <td></td>
-                                                                                    </>
-                                                                                )}
-                                                                                <td className="px-4 py-3 text-right">
-                                                                                    <span className={`font-mono font-bold text-lg ${colors.text}`}>
-                                                                                        {formatCurrency(expandedStep.amount)}
-                                                                                    </span>
-                                                                                </td>
-                                                                            </tr>
-                                                                        </tfoot>
-                                                                    </table>
-                                                                </div>
-
-                                                                {/* Verification note */}
-                                                                {expandedStep.details?.calculation?.type === 'Catchup' && (
-                                                                    <div className="mt-3 text-xs text-slate-400 flex items-center gap-2 px-3">
-                                                                        <span className="text-emerald-400">✓</span>
-                                                                        <span>Vérification: {expandedStep.details.calculation.formula}</span>
-                                                                    </div>
-                                                                )}
-                                                            </div>
-
-                                                            {/* Calculation Details for non-Catchup */}
-                                                            {expandedStep.details?.calculation && expandedStep.details.calculation.type !== 'Catchup' && (
-                                                                <div className="mt-5 p-4 rounded-xl bg-slate-900/50 border border-slate-700/50">
-                                                                    <h4 className="text-sm font-bold text-white mb-3 flex items-center gap-2">
-                                                                        <span>📊</span> Calculation Details
-                                                                    </h4>
-                                                                    <div className="grid grid-cols-2 gap-3">
-                                                                        {expandedStep.details.calculation.valuation !== undefined && (
-                                                                            <div className="bg-slate-800/50 rounded-lg p-3 border border-slate-700/30">
-                                                                                <div className="text-[10px] text-slate-500 uppercase tracking-wider mb-1">Valuation</div>
-                                                                                <div className="font-mono font-bold text-white">{formatCurrency(expandedStep.details.calculation.valuation)}</div>
-                                                                            </div>
-                                                                        )}
-                                                                        {expandedStep.details.calculation.pricePerShare !== undefined && (
-                                                                            <div className="bg-slate-800/50 rounded-lg p-3 border border-slate-700/30">
-                                                                                <div className="text-[10px] text-slate-500 uppercase tracking-wider mb-1">Price per Share</div>
-                                                                                <div className="font-mono font-bold text-white">{formatCurrency(expandedStep.details.calculation.pricePerShare)}</div>
-                                                                            </div>
-                                                                        )}
-                                                                        {expandedStep.details.calculation.preferenceMultiple !== undefined && (
-                                                                            <div className="bg-slate-800/50 rounded-lg p-3 border border-slate-700/30">
-                                                                                <div className="text-[10px] text-slate-500 uppercase tracking-wider mb-1">Pref Multiple</div>
-                                                                                <div className="font-mono font-bold text-white">{expandedStep.details.calculation.preferenceMultiple}x</div>
-                                                                            </div>
-                                                                        )}
-                                                                        {expandedStep.details.calculation.type && (
-                                                                            <div className="bg-slate-800/50 rounded-lg p-3 border border-slate-700/30">
-                                                                                <div className="text-[10px] text-slate-500 uppercase tracking-wider mb-1">Type</div>
-                                                                                <div className="font-mono font-bold text-white">{expandedStep.details.calculation.type}</div>
-                                                                            </div>
-                                                                        )}
-                                                                        {expandedStep.details.calculation.shareClass && (
-                                                                            <div className="bg-slate-800/50 rounded-lg p-3 border border-slate-700/30">
-                                                                                <div className="text-[10px] text-slate-500 uppercase tracking-wider mb-1">Share Class</div>
-                                                                                <div className="font-mono font-bold text-white">{expandedStep.details.calculation.shareClass}</div>
-                                                                            </div>
-                                                                        )}
-                                                                        {expandedStep.details.calculation.investedAmount !== undefined && (
-                                                                            <>
-                                                                                <div className="bg-slate-800/50 rounded-lg p-3 border border-slate-700/30">
-                                                                                    <div className="text-[10px] text-slate-500 uppercase tracking-wider mb-1">Total Invested</div>
-                                                                                    <div className="font-mono font-bold text-white">{formatCurrency(expandedStep.details.calculation.investedAmount)}</div>
-                                                                                </div>
-                                                                                <div className="col-span-2 bg-gradient-to-r from-blue-500/10 via-blue-500/5 to-transparent rounded-lg p-3 border border-blue-500/30">
-                                                                                    <div className="text-[10px] text-blue-400 uppercase tracking-wider mb-1">Calculation Formula</div>
-                                                                                    <div className="font-mono text-sm text-white">
-                                                                                        {formatCurrency(expandedStep.details.calculation.investedAmount)} × {expandedStep.details.calculation.preferenceMultiple}x = <span className={colors.text}>{formatCurrency(expandedStep.amount)}</span>
-                                                                                    </div>
-                                                                                </div>
-                                                                            </>
-                                                                        )}
-                                                                    </div>
-                                                                </div>
-                                                            )}
-                                                        </div>
-                                                    </div>
-                                                </div>
-                                            )}
-                                        </React.Fragment>
-                                    );
-                                })}
-                            </div>
+                                        )}
+                                    </React.Fragment>
+                                );
+                            })}
                         </div>
+                    </div>
 
-                        {/* Footer Summary */}
-                        <div className="relative px-6 py-4 border-t border-slate-700/50 bg-slate-800/30">
-                            <div className="flex flex-wrap items-center justify-center gap-6 text-sm">
-                                <div className="flex items-center gap-2">
-                                    <div className="w-3 h-3 rounded-full bg-gradient-to-r from-amber-500 to-orange-400"></div>
-                                    <span className="text-slate-400">Carve-Out</span>
-                                </div>
-                                <div className="flex items-center gap-2">
-                                    <div className="w-3 h-3 rounded-full bg-gradient-to-r from-blue-500 to-blue-400"></div>
-                                    <span className="text-slate-400">Preferences</span>
-                                </div>
-                                <div className="flex items-center gap-2">
-                                    <div className="w-3 h-3 rounded-full bg-gradient-to-r from-purple-500 to-purple-400"></div>
-                                    <span className="text-slate-400">Participation</span>
-                                </div>
-                                <div className="flex items-center gap-2">
-                                    <div className="w-3 h-3 rounded-full bg-gradient-to-r from-cyan-500 to-cyan-400"></div>
-                                    <span className="text-slate-400">Pro-rata</span>
-                                </div>
+                    {/* Footer Summary */}
+                    <div className="relative px-6 py-4 border-t border-slate-700/50 bg-slate-800/30">
+                        <div className="flex flex-wrap items-center justify-center gap-6 text-sm">
+                            <div className="flex items-center gap-2">
+                                <div className="w-3 h-3 rounded-full bg-gradient-to-r from-amber-500 to-orange-400"></div>
+                                <span className="text-slate-400">Carve-Out</span>
+                            </div>
+                            <div className="flex items-center gap-2">
+                                <div className="w-3 h-3 rounded-full bg-gradient-to-r from-blue-500 to-blue-400"></div>
+                                <span className="text-slate-400">Preferences</span>
+                            </div>
+                            <div className="flex items-center gap-2">
+                                <div className="w-3 h-3 rounded-full bg-gradient-to-r from-purple-500 to-purple-400"></div>
+                                <span className="text-slate-400">Participation</span>
+                            </div>
+                            <div className="flex items-center gap-2">
+                                <div className="w-3 h-3 rounded-full bg-gradient-to-r from-cyan-500 to-cyan-400"></div>
+                                <span className="text-slate-400">Pro-rata</span>
                             </div>
                         </div>
                     </div>
                 </div>
             </div>
         </div>
+
     );
 };
 
