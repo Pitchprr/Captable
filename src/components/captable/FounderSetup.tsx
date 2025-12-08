@@ -1,9 +1,10 @@
 import React, { useState, useEffect } from 'react';
 import { Button } from '../ui/Button';
 import { Input } from '../ui/Input';
-import { Plus, Trash2, Users } from 'lucide-react';
+import { Plus, Trash2, Users, FileSpreadsheet } from 'lucide-react';
 import type { CapTable, Round, Shareholder } from '../../engine/types';
 import { formatCurrency } from '../../utils';
+import { ExcelImportView } from '../import/ExcelImportView';
 
 interface FounderSetupProps {
     onComplete: (capTable: CapTable) => void;
@@ -19,6 +20,7 @@ interface FounderInput {
 
 export const FounderSetup: React.FC<FounderSetupProps> = ({ onComplete }) => {
     const [mode, setMode] = useState<'manual' | 'percentage'>('percentage');
+    const [isImporting, setIsImporting] = useState(false);
     const [totalCapital, setTotalCapital] = useState<number>(1000);
     const [parValue, setParValue] = useState<number>(0.01);
     const [startupName, setStartupName] = useState<string>('');
@@ -157,7 +159,9 @@ export const FounderSetup: React.FC<FounderSetupProps> = ({ onComplete }) => {
                 amount: f.investmentAmount,
                 shares: f.shares
             })),
-            poolSize: 0
+            poolSize: 0,
+            liquidationPreferenceMultiple: 1,
+            isParticipating: false
         };
 
         onComplete({
@@ -168,8 +172,23 @@ export const FounderSetup: React.FC<FounderSetupProps> = ({ onComplete }) => {
         });
     };
 
+    if (isImporting) {
+        return (
+            <ExcelImportView
+                onComplete={onComplete}
+                onCancel={() => setIsImporting(false)}
+            />
+        );
+    }
+
     return (
         <div className="max-w-2xl mx-auto bg-white p-8 rounded-xl shadow-lg border border-slate-200 mt-10">
+            <div className="flex justify-end mb-4">
+                <Button variant="outline" size="sm" onClick={() => setIsImporting(true)}>
+                    <FileSpreadsheet className="w-4 h-4 mr-2 text-green-600" />
+                    Import from Excel
+                </Button>
+            </div>
             <div className="text-center mb-8">
                 <div className="w-12 h-12 bg-blue-100 text-blue-600 rounded-full flex items-center justify-center mx-auto mb-4">
                     <Users className="w-6 h-6" />

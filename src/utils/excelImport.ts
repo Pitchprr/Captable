@@ -1,0 +1,705 @@
+import * as XLSX from 'xlsx';
+import Papa from 'papaparse';
+import Fuse from 'fuse.js';
+import { z } from 'zod';
+import type { CapTable, Shareholder, Round, ShareholderRole, Investment } from '../engine/types';
+import type { ColumnMapping, ImportedRow, DetectedRound } from '../components/import/types';
+
+// ============================================================
+// ZOD SCHEMAS FOR VALIDATION
+// ============================================================
+
+const ShareholderRowSchema = z.object({
+    name: z.string().min(1, "Name is required"),
+    role: z.string().optional(),
+    shares: z.number().nonnegative().optional(),
+    investment: z.number().nonnegative().optional(),
+});
+
+export type ValidatedRow = z.infer<typeof ShareholderRowSchema>;
+
+// ============================================================
+// SMART HEURISTICS ENGINE
+// ============================================================
+
+/**
+ * Extended vocabulary for detecting column types
+ * Organized by language (EN/FR) and category
+ */
+const VOCABULARY = {
+    name: {
+        headers: [
+            // English
+            'name', 'investor', 'shareholder', 'holder', 'owner', 'partner', 'member',
+            'beneficiary', 'stakeholder', 'participant', 'entity', 'company', 'fund',
+            // French
+            'nom', 'actionnaire', 'investisseur', 'associé', 'porteur', 'détenteur',
+            'bénéficiaire', 'participant', 'entité', 'société', 'fonds'
+        ],
+        // Value patterns that indicate this is a name column
+        valuePatterns: [
+            /^[A-Z][a-zéèêëàâäùûüôöîï]+ [A-Z][a-zéèêëàâäùûüôöîï]+$/, // "John Smith" or "Jean Dupont"
+            /\b(ventures?|capital|partners?|fund|fonds|investments?)\b/i, // VC names
+            /\b(sarl|sas|sa|inc|ltd|llc|gmbh)\b/i, // Company suffixes
+            /\b(family|office|holding)\b/i,
+        ]
+    },
+    role: {
+        headers: [
+            'role', 'type', 'category', 'status', 'class', 'groupe',
+            'rôle', 'catégorie', 'statut', 'qualité', 'nature'
+        ],
+        // Known role values
+        knownValues: [
+            'founder', 'co-founder', 'fondateur', 'co-fondateur',
+            'investor', 'investisseur', 'angel', 'ba', 'business angel',
+            'vc', 'venture', 'fund', 'fonds',
+            'employee', 'salarié', 'salarie', 'team', 'équipe',
+            'advisor', 'adviser', 'conseiller', 'board', 'administrateur',
+            'other', 'autre', 'divers'
+        ]
+    },
+    shares: {
+        headers: [
+            // English
+            'shares', 'share', 'stock', 'stocks', 'equity', 'units', 'tokens',
+            'quantity', 'qty', 'nb', 'number', 'count', 'holdings',
+            // French
+            'actions', 'action', 'titres', 'titre', 'parts', 'part',
+            'participation', 'nombre', 'quantité', 'détention'
+        ],
+        // Patterns to detect share columns from values
+        valuePatterns: {
+            // Large integers without decimals (typical for shares)
+            isLikelyShares: (values: any[]) => {
+                const nums = values.filter(v => typeof v === 'number' || !isNaN(parseFloat(v)));
+                if (nums.length < 2) return false;
+
+                const parsed = nums.map(v => parseFloat(String(v).replace(/\s/g, '')));
+                // Shares are typically large whole numbers
+                const avgValue = parsed.reduce((a, b) => a + b, 0) / parsed.length;
+                const hasDecimals = parsed.some(v => v % 1 !== 0);
+
+                return avgValue > 100 && !hasDecimals;
+            }
+        }
+    },
+    investment: {
+        headers: [
+            // English
+            'investment', 'invested', 'amount', 'value', 'capital', 'cash',
+            'money', 'funding', 'raised', 'contributed', 'ticket', 'check',
+            'commitment', 'subscription',
+            // French
+            'investissement', 'montant', 'valeur', 'apport', 'versement',
+            'souscription', 'engagement', 'mise', 'contribution'
+        ],
+        // Currency symbols and patterns
+        currencyPatterns: [
+            /[€$£¥₹]/,
+            /\b(eur|usd|gbp|chf)\b/i,
+            /\d+[.,]\d{2}$/, // Ends with 2 decimals (typical for currency)
+        ]
+    },
+    rounds: {
+        // Round name patterns
+        patterns: [
+            /\b(seed|amorçage|amorçage)\b/i,
+            /\b(pre[- ]?seed)\b/i,
+            /\b(series|série)\s*[a-z]\d*/i,
+            /\b(round|tour|levée)\s*\d*/i,
+            /\b(bridge)\b/i,
+            /\b(angel|ba)\b/i,
+            /\b(founders?|fondateurs?|founding)\b/i,
+            /\b(initial|création)\b/i,
+            /\b20\d{2}\b/, // Years like 2023, 2024
+        ],
+        // Extract round name from header
+        extractRoundName: (header: string): string | null => {
+            const patterns = [
+                /\b(pre[- ]?seed)\b/i,
+                /\b(seed)\b/i,
+                /\b(series|série)\s*([a-z]\d*)/i,
+                /\b(round|tour|levée)\s*(\d+)/i,
+                /\b(bridge)\s*(\d*)/i,
+                /\b(angel)\b/i,
+                /\b(founders?|fondateurs?)\b/i,
+                /\b(20\d{2})\b/,
+            ];
+
+            for (const pattern of patterns) {
+                const match = header.match(pattern);
+                if (match) {
+                    // Format the round name nicely
+                    let name = match[0].trim();
+                    name = name.charAt(0).toUpperCase() + name.slice(1).toLowerCase();
+                    return name;
+                }
+            }
+            return null;
+        }
+    }
+};
+
+/**
+ * Analyze a column's values to determine its likely type
+ */
+interface ColumnAnalysis {
+    columnIndex: number;
+    header: string;
+    inferredType: 'name' | 'role' | 'shares' | 'investment' | 'percentage' | 'date' | 'unknown';
+    confidence: number; // 0-100
+    roundName?: string;
+    reasoning: string[];
+}
+
+function analyzeColumnValues(header: string, values: any[]): ColumnAnalysis {
+    const reasoning: string[] = [];
+    const scores: Record<string, number> = {
+        name: 0,
+        role: 0,
+        shares: 0,
+        investment: 0,
+        percentage: 0,
+        date: 0,
+        unknown: 0
+    };
+
+    const cleanValues = values
+        .filter(v => v !== null && v !== undefined && v !== '')
+        .slice(0, 20); // Sample first 20 non-empty values
+
+    if (cleanValues.length === 0) {
+        return { columnIndex: 0, header, inferredType: 'unknown', confidence: 0, reasoning: ['No data'] };
+    }
+
+    // ============================================================
+    // STEP 1: Analyze Header Text
+    // ============================================================
+    const headerLower = header.toLowerCase().trim();
+
+    // Check name vocabulary
+    if (VOCABULARY.name.headers.some(kw => headerLower.includes(kw))) {
+        scores.name += 40;
+        reasoning.push(`Header contains name keyword`);
+    }
+
+    // Check role vocabulary
+    if (VOCABULARY.role.headers.some(kw => headerLower.includes(kw))) {
+        scores.role += 50;
+        reasoning.push(`Header contains role keyword`);
+    }
+
+    // Check shares vocabulary
+    if (VOCABULARY.shares.headers.some(kw => headerLower.includes(kw))) {
+        scores.shares += 40;
+        reasoning.push(`Header contains shares keyword`);
+    }
+
+    // Check investment vocabulary
+    if (VOCABULARY.investment.headers.some(kw => headerLower.includes(kw))) {
+        scores.investment += 40;
+        reasoning.push(`Header contains investment keyword`);
+    }
+
+    // ============================================================
+    // STEP 2: Analyze Value Patterns
+    // ============================================================
+
+    // Count value types
+    let textCount = 0;
+    let numberCount = 0;
+    let currencyCount = 0;
+    let percentCount = 0;
+    let roleMatchCount = 0;
+    let namePatternCount = 0;
+
+    for (const val of cleanValues) {
+        const strVal = String(val).trim();
+
+        // Check if it's a number
+        const numVal = parseNumber(strVal);
+        if (!isNaN(numVal)) {
+            numberCount++;
+
+            // Check for currency patterns
+            if (VOCABULARY.investment.currencyPatterns.some(p => p.test(strVal))) {
+                currencyCount++;
+            }
+
+            // Check for percentage
+            if (strVal.includes('%') || (numVal >= 0 && numVal <= 100 && strVal.length < 6)) {
+                percentCount++;
+            }
+        } else {
+            textCount++;
+
+            // Check if it matches known role values
+            if (VOCABULARY.role.knownValues.some(rv => strVal.toLowerCase().includes(rv))) {
+                roleMatchCount++;
+            }
+
+            // Check if it matches name patterns
+            if (VOCABULARY.name.valuePatterns.some(p => p.test(strVal))) {
+                namePatternCount++;
+            }
+        }
+    }
+
+    const textRatio = textCount / cleanValues.length;
+    const numberRatio = numberCount / cleanValues.length;
+
+    // Text-heavy column
+    if (textRatio > 0.7) {
+        if (roleMatchCount > cleanValues.length * 0.3) {
+            scores.role += 50;
+            reasoning.push(`${roleMatchCount} values match known roles`);
+        } else if (namePatternCount > 0 || textCount > 2) {
+            scores.name += 30;
+            reasoning.push(`Text values look like names`);
+        }
+    }
+
+    // Number-heavy column
+    if (numberRatio > 0.7) {
+        if (currencyCount > cleanValues.length * 0.3) {
+            scores.investment += 40;
+            reasoning.push(`Values contain currency symbols`);
+        } else if (percentCount > cleanValues.length * 0.5) {
+            scores.percentage += 50;
+            reasoning.push(`Values look like percentages`);
+        } else {
+            // Analyze number characteristics
+            const nums = cleanValues.map(v => parseNumber(String(v))).filter(n => !isNaN(n));
+            const avg = nums.reduce((a, b) => a + b, 0) / nums.length;
+            const hasDecimals = nums.some(n => n % 1 !== 0);
+
+            if (avg > 1000 && !hasDecimals) {
+                scores.shares += 35;
+                reasoning.push(`Large whole numbers suggest shares (avg: ${avg.toFixed(0)})`);
+            } else if (hasDecimals || avg < 1000) {
+                scores.investment += 25;
+                reasoning.push(`Decimal values suggest amounts`);
+            }
+        }
+    }
+
+    // ============================================================
+    // STEP 3: Check for Round Name in Header
+    // ============================================================
+    const roundName = VOCABULARY.rounds.extractRoundName(header);
+    if (roundName && (scores.shares > 20 || scores.investment > 20 || numberRatio > 0.5)) {
+        reasoning.push(`Detected round: "${roundName}"`);
+    }
+
+    // ============================================================
+    // STEP 4: Determine Winner
+    // ============================================================
+    let maxScore = 0;
+    let inferredType: ColumnAnalysis['inferredType'] = 'unknown';
+
+    for (const [type, score] of Object.entries(scores)) {
+        if (score > maxScore) {
+            maxScore = score;
+            inferredType = type as ColumnAnalysis['inferredType'];
+        }
+    }
+
+    // Normalize confidence (0-100)
+    const confidence = Math.min(100, maxScore);
+
+    return {
+        columnIndex: 0,
+        header,
+        inferredType,
+        confidence,
+        roundName: roundName || undefined,
+        reasoning
+    };
+}
+
+// ============================================================
+// SMART COLUMN MATCHING
+// ============================================================
+
+export interface SmartMatchResult {
+    header: string;
+    columnIndex: number;
+    destination: 'name' | 'role' | 'shares' | 'investment' | 'ignored';
+    confidence: number;
+    roundName?: string;
+    roundId?: string;
+    reasoning: string[];
+}
+
+export const smartColumnMatch = (
+    headers: string[],
+    data: ImportedRow[]
+): { matches: SmartMatchResult[], detectedRounds: DetectedRound[] } => {
+    const matches: SmartMatchResult[] = [];
+    const detectedRounds: DetectedRound[] = [];
+    const usedTypes = new Set<string>(); // Track unique name/role assignments
+
+    // Analyze each column
+    headers.forEach((header, columnIndex) => {
+        // Get values for this column
+        const values = data.slice(0, 20).map(row => row[header]);
+
+        // Run smart analysis
+        const analysis = analyzeColumnValues(header, values);
+        analysis.columnIndex = columnIndex;
+
+        let destination: SmartMatchResult['destination'] = 'ignored';
+        let roundId: string | undefined;
+        let roundName: string | undefined;
+
+        // Apply type (with uniqueness for name/role)
+        if (analysis.inferredType === 'name' && !usedTypes.has('name')) {
+            destination = 'name';
+            usedTypes.add('name');
+        } else if (analysis.inferredType === 'role' && !usedTypes.has('role')) {
+            destination = 'role';
+            usedTypes.add('role');
+        } else if (analysis.inferredType === 'shares' || analysis.inferredType === 'investment') {
+            destination = analysis.inferredType;
+            roundName = analysis.roundName || guessRoundFromContext(header, columnIndex, headers);
+
+            // Find or create round
+            let round = detectedRounds.find(r => r.name.toLowerCase() === roundName?.toLowerCase());
+            if (!round) {
+                round = {
+                    id: `round-${Date.now()}-${detectedRounds.length}`,
+                    name: roundName || `Round ${detectedRounds.length + 1}`
+                };
+                detectedRounds.push(round);
+            }
+
+            roundId = round.id;
+            roundName = round.name;
+
+            // Track column indices on the round
+            if (destination === 'shares') {
+                round.sharesColumnIndex = columnIndex;
+            } else {
+                round.investmentColumnIndex = columnIndex;
+            }
+        }
+
+        matches.push({
+            header,
+            columnIndex,
+            destination,
+            confidence: analysis.confidence,
+            roundName,
+            roundId,
+            reasoning: analysis.reasoning
+        });
+    });
+
+    return { matches, detectedRounds };
+};
+
+/**
+ * Try to guess round name from column context (neighboring columns, header patterns)
+ */
+function guessRoundFromContext(header: string, index: number, allHeaders: string[]): string {
+    // Check if the header itself contains a round pattern
+    const roundFromHeader = VOCABULARY.rounds.extractRoundName(header);
+    if (roundFromHeader) return roundFromHeader;
+
+    // Check neighboring headers for round context
+    const neighbors = [
+        allHeaders[index - 1],
+        allHeaders[index + 1]
+    ].filter(Boolean);
+
+    for (const neighbor of neighbors) {
+        const roundFromNeighbor = VOCABULARY.rounds.extractRoundName(neighbor);
+        if (roundFromNeighbor) return roundFromNeighbor;
+    }
+
+    // Default based on position
+    if (index < allHeaders.length / 3) {
+        return 'Founding';
+    } else if (index < allHeaders.length * 2 / 3) {
+        return 'Seed';
+    } else {
+        return 'Series A';
+    }
+}
+
+// ============================================================
+// PARSING FUNCTIONS
+// ============================================================
+
+export const parseExcel = (file: File): Promise<{ headers: string[], data: ImportedRow[] }> => {
+    return new Promise((resolve, reject) => {
+        const reader = new FileReader();
+
+        reader.onload = (e) => {
+            try {
+                const arrayBuffer = e.target?.result as ArrayBuffer;
+                const data = new Uint8Array(arrayBuffer);
+                const workbook = XLSX.read(data, { type: 'array' });
+                const firstSheetName = workbook.SheetNames[0];
+                const worksheet = workbook.Sheets[firstSheetName];
+                const jsonData = XLSX.utils.sheet_to_json(worksheet, { header: 1 });
+
+                if (jsonData.length === 0) {
+                    reject(new Error('Excel file is empty'));
+                    return;
+                }
+
+                const headers = (jsonData[0] as any[]).map(h => String(h || '').trim());
+                const rows = jsonData.slice(1)
+                    .filter(row => (row as any[]).some(cell => cell !== undefined && cell !== null && cell !== ''))
+                    .map(row => {
+                        const obj: ImportedRow = {};
+                        headers.forEach((header, index) => {
+                            obj[header] = (row as any[])[index];
+                        });
+                        return obj;
+                    });
+
+                resolve({ headers, data: rows });
+            } catch (error) {
+                reject(error);
+            }
+        };
+
+        reader.onerror = (error) => reject(error);
+        reader.readAsArrayBuffer(file);
+    });
+};
+
+export const parseCSV = (file: File): Promise<{ headers: string[], data: ImportedRow[] }> => {
+    return new Promise((resolve, reject) => {
+        Papa.parse(file, {
+            header: true,
+            skipEmptyLines: true,
+            complete: (results) => {
+                if (results.errors.length > 0) {
+                    console.warn('CSV parsing warnings:', results.errors);
+                }
+                const headers = results.meta.fields || [];
+                const data = results.data as ImportedRow[];
+                resolve({ headers, data });
+            },
+            error: (error) => reject(error)
+        });
+    });
+};
+
+export const parseFile = async (file: File): Promise<{ headers: string[], data: ImportedRow[] }> => {
+    const extension = file.name.split('.').pop()?.toLowerCase();
+
+    if (extension === 'csv') {
+        return parseCSV(file);
+    } else if (extension === 'xlsx' || extension === 'xls') {
+        return parseExcel(file);
+    } else {
+        throw new Error(`Unsupported file format: ${extension}`);
+    }
+};
+
+// ============================================================
+// DATA VALIDATION
+// ============================================================
+
+export interface ValidationResult {
+    isValid: boolean;
+    errors: { row: number; column: string; message: string }[];
+    warnings: { row: number; column: string; message: string }[];
+    validatedData: ValidatedRow[];
+}
+
+export const validateImportedData = (
+    headers: string[],
+    data: ImportedRow[],
+    matches: SmartMatchResult[]
+): ValidationResult => {
+    const errors: { row: number; column: string; message: string }[] = [];
+    const warnings: { row: number; column: string; message: string }[] = [];
+    const validatedData: ValidatedRow[] = [];
+
+    // Check required columns
+    const hasNameColumn = matches.some(m => m.destination === 'name' && m.confidence > 30);
+    if (!hasNameColumn) {
+        errors.push({ row: 0, column: '-', message: 'No shareholder name column detected.' });
+    }
+
+    const hasInvestmentData = matches.some(m => (m.destination === 'shares' || m.destination === 'investment') && m.confidence > 20);
+    if (!hasInvestmentData) {
+        warnings.push({ row: 0, column: '-', message: 'No shares or investment columns detected.' });
+    }
+
+    // Validate each row
+    data.forEach((row, rowIndex) => {
+        const rowData: Partial<ValidatedRow> = {};
+
+        matches.forEach(match => {
+            if (match.destination === 'ignored') return;
+
+            const value = row[match.header];
+
+            if (match.destination === 'name') {
+                if (!value || String(value).trim() === '') {
+                    errors.push({ row: rowIndex + 2, column: match.header, message: 'Empty name' });
+                } else {
+                    rowData.name = String(value).trim();
+                }
+            } else if (match.destination === 'role') {
+                rowData.role = value ? String(value).trim() : undefined;
+            } else if (match.destination === 'shares' || match.destination === 'investment') {
+                const numVal = parseNumber(value);
+                if (value !== undefined && value !== null && value !== '' && isNaN(numVal)) {
+                    warnings.push({ row: rowIndex + 2, column: match.header, message: `Invalid number: "${value}"` });
+                }
+            }
+        });
+
+        if (rowData.name) {
+            validatedData.push(rowData as ValidatedRow);
+        }
+    });
+
+    return {
+        isValid: errors.length === 0,
+        errors,
+        warnings,
+        validatedData
+    };
+};
+
+const parseNumber = (value: any): number => {
+    if (typeof value === 'number') return value;
+    if (value === undefined || value === null || value === '') return NaN;
+
+    // Handle European number format and currency symbols
+    const cleaned = String(value)
+        .replace(/[€$£¥\s]/g, '')
+        .replace(/,/g, '.')
+        .replace(/\.(?=.*\.)/g, '');
+
+    return parseFloat(cleaned);
+};
+
+// ============================================================
+// FINAL PROCESSING
+// ============================================================
+
+export const processImportedData = (
+    headers: string[],
+    data: ImportedRow[],
+    matches: SmartMatchResult[],
+    detectedRounds: DetectedRound[]
+): CapTable => {
+    const shareholders: Shareholder[] = [];
+    const investmentsMap = new Map<string, Investment[]>();
+
+    // Initialize rounds
+    const rounds: Round[] = detectedRounds.map((dr, index) => ({
+        id: dr.id,
+        name: dr.name,
+        shareClass: `Class ${String.fromCharCode(65 + index)}`,
+        date: new Date().toISOString().split('T')[0],
+        preMoneyValuation: 0,
+        pricePerShare: 1,
+        totalShares: 0,
+        newSharesIssued: 0,
+        investments: [],
+        poolSize: 0,
+        liquidationPreferenceMultiple: 1,
+        isParticipating: false
+    }));
+
+    rounds.forEach(r => investmentsMap.set(r.id, []));
+
+    // Process each row
+    data.forEach((row, rowIndex) => {
+        const id = `sh-import-${rowIndex}`;
+        let name = `Shareholder ${rowIndex + 1}`;
+        let role: ShareholderRole = 'Angel';
+
+        // Extract name and role
+        matches.forEach(match => {
+            const value = row[match.header];
+            if (value === undefined || value === null) return;
+
+            if (match.destination === 'name') {
+                name = String(value).trim();
+            } else if (match.destination === 'role') {
+                role = inferRole(String(value));
+            }
+        });
+
+        shareholders.push({ id, name, role });
+
+        // Extract investments per round
+        detectedRounds.forEach(round => {
+            let shares = 0;
+            let amount = 0;
+
+            matches.forEach(match => {
+                if (match.roundId !== round.id) return;
+
+                const value = parseNumber(row[match.header]);
+                if (isNaN(value) || value <= 0) return;
+
+                if (match.destination === 'shares') {
+                    shares = value;
+                } else if (match.destination === 'investment') {
+                    amount = value;
+                }
+            });
+
+            if (shares > 0 || amount > 0) {
+                if (shares > 0 && amount === 0) amount = shares;
+                if (amount > 0 && shares === 0) shares = amount;
+
+                investmentsMap.get(round.id)!.push({
+                    shareholderId: id,
+                    amount,
+                    shares,
+                    calculatedShares: shares
+                });
+            }
+        });
+    });
+
+    // Finalize rounds
+    const finalRounds = rounds.map(r => {
+        const investments = investmentsMap.get(r.id)!;
+        const totalShares = investments.reduce((sum, inv) => sum + inv.shares, 0);
+        const totalAmount = investments.reduce((sum, inv) => sum + inv.amount, 0);
+
+        return {
+            ...r,
+            investments,
+            newSharesIssued: totalShares,
+            totalShares,
+            pricePerShare: totalShares > 0 ? totalAmount / totalShares : 1
+        };
+    }).filter(r => r.investments.length > 0);
+
+    return {
+        shareholders,
+        rounds: finalRounds,
+        optionGrants: [],
+        startupName: 'Imported Cap Table'
+    };
+};
+
+const inferRole = (roleStr: string): ShareholderRole => {
+    const lower = roleStr.toLowerCase();
+    if (lower.includes('founder') || lower.includes('fondateur') || lower.includes('co-founder')) return 'Founder';
+    if (lower.includes('employee') || lower.includes('salarié') || lower.includes('salarie')) return 'Employee';
+    if (lower.includes('advisor') || lower.includes('conseiller')) return 'Advisor';
+    if (lower.includes('vc') || lower.includes('fund') || lower.includes('fonds') || lower.includes('venture')) return 'VC';
+    if (lower.includes('angel') || lower.includes('ba')) return 'Angel';
+    return 'Other';
+};
+
+// Legacy exports for backwards compatibility
+export const intelligentColumnMatch = smartColumnMatch;
+export type MatchResult = SmartMatchResult;
