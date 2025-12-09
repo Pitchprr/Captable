@@ -24,6 +24,7 @@ interface WaterfallViewProps {
     earnoutEnabled?: boolean;
     earnoutUpfront?: number;
     earnoutMax?: number;
+    viewMode?: 'waterfall' | 'sensitivity';
 }
 
 export const WaterfallView: React.FC<WaterfallViewProps> = ({
@@ -38,7 +39,8 @@ export const WaterfallView: React.FC<WaterfallViewProps> = ({
     setCarveOutBeneficiary,
     earnoutEnabled = false,
     earnoutUpfront = 0,
-    earnoutMax = 0
+    earnoutMax = 0,
+    viewMode = 'waterfall'
 }) => {
     const [payoutStructure, setPayoutStructure] = useState<PayoutStructure>('standard');
     const [expandedStep, setExpandedStep] = useState<WaterfallStep | null>(null);
@@ -55,9 +57,11 @@ export const WaterfallView: React.FC<WaterfallViewProps> = ({
     const [escrowDuration, setEscrowDuration] = useState(12);
 
     // Sensitivity Analysis State
-    const [sensitivityAnalysisEnabled, setSensitivityAnalysisEnabled] = useState(false);
+    // Controlled by viewMode prop now mostly, but we keep params here
     const [sensitivityScenarioCount, setSensitivityScenarioCount] = useState(5);
     const [sensitivityStepSize, setSensitivityStepSize] = useState(5000000);
+
+    const sensitivityAnalysisEnabled = viewMode === 'sensitivity';
 
     // If earn-out is enabled, the waterfall distributes the Upfront Payment, not the full EV
     const effectiveExitValuation = earnoutEnabled ? earnoutUpfront : exitValuation;
@@ -94,11 +98,11 @@ export const WaterfallView: React.FC<WaterfallViewProps> = ({
     // Calculate Sensitivity Scenarios
     const sensitivityScenarios = useMemo(() => {
         if (!sensitivityAnalysisEnabled) return [];
-        // Center around current valuation
-        const half = Math.floor(sensitivityScenarioCount / 2);
+        // Start from current valuation (Base)
         return Array.from({ length: sensitivityScenarioCount }, (_, i) => {
-            const stepOffset = i - half;
-            const ev = Math.max(0, effectiveExitValuation + stepOffset * sensitivityStepSize);
+            // i=0 -> Current EV
+            // i=1 -> Current EV + Step
+            const ev = Math.max(0, effectiveExitValuation + i * sensitivityStepSize);
             return {
                 exitValue: ev,
                 result: calculateWaterfall(capTable, ev, preferences, maConfig)
@@ -167,6 +171,7 @@ export const WaterfallView: React.FC<WaterfallViewProps> = ({
             <div className="grid grid-cols-1 lg:grid-cols-3 gap-8 items-start">
                 {/* Configuration Panel - Left Side */}
                 <div className="lg:col-span-1 space-y-6 self-start">
+
                     {/* Exit Scenario */}
                     <div className="bg-white p-6 rounded-xl border border-slate-200 shadow-sm">
                         <div className="flex items-center justify-between mb-4">
@@ -202,177 +207,158 @@ export const WaterfallView: React.FC<WaterfallViewProps> = ({
                         </div>
                     </div>
 
-                    {/* Liquidation Preferences Config */}
+                    {/* 3. Liquidation Preferences Config */}
                     <PreferenceConfig
                         preferences={preferences}
                         setPreferences={setPreferences}
                         capTable={capTable}
                     />
 
-                    {/* M&A and Carve-Out Grid */}
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                        {/* Carve-Out Section */}
-                        <div className="bg-white p-5 rounded-xl border border-slate-200 shadow-sm relative overflow-hidden group hover:border-amber-300 transition-colors">
-                            <div className="absolute top-0 right-0 p-3 opacity-5 group-hover:opacity-10 transition-opacity">
-                                <span className="text-4xl">🎁</span>
-                            </div>
-                            <h3 className="text-sm font-bold text-slate-800 mb-4 flex items-center gap-2">
-                                <span>🎁</span> Mgt Carve-Out
-                            </h3>
-                            <div className="space-y-4">
-                                <div>
-                                    <div className="flex justify-between text-xs mb-1.5">
-                                        <span className="text-slate-500 font-medium">Carve-out Size</span>
-                                        <span className="text-amber-600 font-bold">{carveOutPercent}%</span>
-                                    </div>
-                                    <input
-                                        type="range"
-                                        min="0"
-                                        max="25"
-                                        step="0.5"
-                                        value={carveOutPercent}
-                                        onChange={(e) => setCarveOutPercent(Number(e.target.value))}
-                                        className="w-full accent-amber-500 h-1.5 bg-slate-200 rounded-lg appearance-none cursor-pointer"
-                                    />
-                                    <div className="flex justify-between text-[10px] text-slate-400 mt-1">
-                                        <span>0%</span>
-                                        <span>25%</span>
-                                    </div>
-                                </div>
-                                <div className="pt-2 border-t border-slate-100">
-                                    <label className="block text-xs font-medium text-slate-500 mb-1.5">Beneficiary</label>
-                                    <div className="flex bg-slate-100 p-1 rounded-lg">
-                                        {(['team', 'founders-only', 'everyone'] as CarveOutBeneficiary[]).map((b) => (
-                                            <button
-                                                key={b}
-                                                onClick={() => setCarveOutBeneficiary(b)}
-                                                className={`flex-1 py-1.5 text-[10px] font-bold uppercase tracking-wide rounded-md transition-all ${carveOutBeneficiary === b
-                                                    ? 'bg-white text-amber-600 shadow-sm'
-                                                    : 'text-slate-400 hover:text-slate-600'
-                                                    }`}
-                                            >
-                                                {b === 'founders-only' ? 'Founders' : b.charAt(0).toUpperCase() + b.slice(1)}
-                                            </button>
-                                        ))}
-                                    </div>
-                                </div>
-                            </div>
+                    {/* 4. Carve-Out (Moved to standalone since grid is removed in this block) */}
+                    <div className="bg-white p-5 rounded-xl border border-slate-200 shadow-sm relative overflow-hidden group hover:border-amber-300 transition-colors">
+                        <div className="absolute top-0 right-0 p-3 opacity-5 group-hover:opacity-10 transition-opacity">
+                            <span className="text-4xl">🎁</span>
                         </div>
-
-                        {/* Sensitivity Analysis Toggle */}
-                        <div className="bg-white p-5 rounded-xl border border-slate-200 shadow-sm relative overflow-hidden text-sm">
-                            <div className="flex items-center justify-between mb-4">
-                                <h3 className="font-bold text-slate-800 flex items-center gap-2">
-                                    <span>🎯</span> Sensitivity
-                                </h3>
-                                <label className="relative inline-flex items-center cursor-pointer">
-                                    <input
-                                        type="checkbox"
-                                        checked={sensitivityAnalysisEnabled}
-                                        onChange={(e) => setSensitivityAnalysisEnabled(e.target.checked)}
-                                        className="sr-only peer"
-                                    />
-                                    <div className="w-9 h-5 bg-slate-200 peer-focus:outline-none peer-focus:ring-2 peer-focus:ring-indigo-300 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-indigo-600"></div>
-                                </label>
-                            </div>
-
-                            {sensitivityAnalysisEnabled ? (
-                                <div className="space-y-3 animate-in fade-in slide-in-from-top-2 duration-200">
-                                    <div>
-                                        <label className="block text-xs font-medium text-slate-500 mb-1">Scenarios</label>
-                                        <div className="relative z-0">
-                                            <ExitScenariosConfig
-                                                baseExitValue={effectiveExitValuation}
-                                                scenarioCount={sensitivityScenarioCount}
-                                                stepSize={sensitivityStepSize}
-                                                setScenarioCount={setSensitivityScenarioCount}
-                                                setStepSize={setSensitivityStepSize}
-                                            />
-                                        </div>
-                                    </div>
+                        <h3 className="text-sm font-bold text-slate-800 mb-4 flex items-center gap-2">
+                            <span>🎁</span> Mgt Carve-Out
+                        </h3>
+                        <div className="space-y-4">
+                            <div>
+                                <div className="flex justify-between text-xs mb-1.5">
+                                    <span className="text-slate-500 font-medium">Carve-out Size</span>
+                                    <span className="text-amber-600 font-bold">{carveOutPercent}%</span>
                                 </div>
-                            ) : (
-                                <p className="text-xs text-slate-400 italic mt-2">
-                                    Compare payouts across multiple exit valuations.
-                                </p>
-                            )}
+                                <input
+                                    type="range"
+                                    min="0"
+                                    max="25"
+                                    step="0.5"
+                                    value={carveOutPercent}
+                                    onChange={(e) => setCarveOutPercent(Number(e.target.value))}
+                                    className="w-full accent-amber-500 h-1.5 bg-slate-200 rounded-lg appearance-none cursor-pointer"
+                                />
+                                <div className="flex justify-between text-[10px] text-slate-400 mt-1">
+                                    <span>0%</span>
+                                    <span>25%</span>
+                                </div>
+                            </div>
+                            <div className="pt-2 border-t border-slate-100">
+                                <label className="block text-xs font-medium text-slate-500 mb-1.5">Beneficiary</label>
+                                <div className="flex bg-slate-100 p-1 rounded-lg">
+                                    {(['team', 'founders-only', 'everyone'] as CarveOutBeneficiary[]).map((b) => (
+                                        <button
+                                            key={b}
+                                            onClick={() => setCarveOutBeneficiary(b)}
+                                            className={`flex-1 py-1.5 text-[10px] font-bold uppercase tracking-wide rounded-md transition-all ${carveOutBeneficiary === b
+                                                ? 'bg-white text-amber-600 shadow-sm'
+                                                : 'text-slate-400 hover:text-slate-600'
+                                                }`}
+                                        >
+                                            {b === 'founders-only' ? 'Founders' : b.charAt(0).toUpperCase() + b.slice(1)}
+                                        </button>
+                                    ))}
+                                </div>
+                            </div>
                         </div>
                     </div>
                 </div>
 
                 {/* Results Panel - Right Side */}
-                <div className="lg:col-span-2 space-y-8">
+                <div className="lg:col-span-2 space-y-6">
+                    {/* Header / Tab System */}
+                    <div className="flex items-center justify-between border-b border-slate-200 pb-4">
+                        <div className="flex items-center gap-4">
+                            <h2 className="text-xl font-bold text-slate-800">
+                                {viewMode === 'sensitivity' ? 'Sensitivity Analysis' : 'Waterfall Analysis'}
+                            </h2>
+                            {viewMode === 'sensitivity' && (
+                                <span className="px-3 py-1 bg-indigo-100 text-indigo-700 text-xs font-bold rounded-full border border-indigo-200">
+                                    Simulating {sensitivityScenarioCount} Scenarios
+                                </span>
+                            )}
+                        </div>
+                    </div>
 
-                    {/* Conversion Analysis (Top priority) */}
-                    {conversionAnalysis && conversionAnalysis.length > 0 && (
-                        <div className="bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900 p-6 rounded-2xl shadow-xl border border-slate-700/50 overflow-hidden relative">
-                            {/* Background Pattern */}
-                            <div className="absolute inset-0 opacity-5" style={{ backgroundImage: `radial-gradient(circle at 2px 2px, white 1px, transparent 0)`, backgroundSize: '24px 24px' }}></div>
-
-                            <div className="relative flex items-center justify-between mb-6">
-                                <div className="flex items-center gap-3">
-                                    <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-amber-400 to-orange-500 flex items-center justify-center shadow-lg shadow-orange-500/20">
-                                        <span className="text-2xl">⚖️</span>
-                                    </div>
-                                    <div>
-                                        <h3 className="text-xl font-bold text-white">Conversion Analysis</h3>
-                                        <p className="text-slate-400 text-sm">Optimal path decision for Preferred Shares</p>
-                                    </div>
+                    {/* SENSITIVITY VIEW */}
+                    {sensitivityAnalysisEnabled && (
+                        <div className="space-y-6 animate-in fade-in slide-in-from-right-4 duration-300">
+                            {/* 1. Sensitivity Configuration (Moved from Left) */}
+                            <div className="bg-white p-6 rounded-xl border border-slate-200 shadow-sm">
+                                <div className="flex items-center gap-2 mb-4">
+                                    <Settings2 className="w-5 h-5 text-slate-500" />
+                                    <h3 className="font-semibold text-slate-700">Simulation Parameters</h3>
                                 </div>
+                                <ExitScenariosConfig
+                                    baseExitValue={effectiveExitValuation}
+                                    scenarioCount={sensitivityScenarioCount}
+                                    stepSize={sensitivityStepSize}
+                                    setScenarioCount={setSensitivityScenarioCount}
+                                    setStepSize={setSensitivityStepSize}
+                                />
                             </div>
 
-                            <div className="grid grid-cols-1 gap-4">
-                                {conversionAnalysis.map((analysis, index) => {
-                                    const isConversion = analysis.decision === 'Convert to Ordinary';
-                                    const difference = Math.abs(analysis.valueAsConverted - analysis.valueAsPref);
+                            {/* 2. Results Matrix */}
+                            <div className="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm">
+                                <div className="flex items-center justify-between mb-6">
+                                    <h3 className="text-lg font-bold text-slate-800">Payout Comparison</h3>
+                                </div>
+                                <MultiExitComparison
+                                    scenarios={sensitivityScenarios}
+                                    capTable={capTable}
+                                />
+                            </div>
+                        </div>
+                    )}
 
-                                    return (
-                                        <div key={analysis.shareClass} className={`relative rounded-xl p-5 border backdrop-blur-sm transition-all ${isConversion ? 'bg-purple-900/20 border-purple-500/30' : 'bg-blue-900/20 border-blue-500/30'}`}>
-                                            <div className="flex items-center justify-between">
-                                                <div className="flex items-center gap-4">
-                                                    <div className={`px-3 py-1.5 rounded-lg font-bold text-sm ${isConversion ? 'bg-purple-500/20 text-purple-300' : 'bg-blue-500/20 text-blue-300'}`}>
-                                                        {analysis.shareClass}
-                                                    </div>
-                                                    <div className="flex items-center gap-2">
-                                                        <span className="text-slate-400 text-sm">Best Option:</span>
-                                                        <span className={`font-bold ${isConversion ? 'text-purple-400' : 'text-blue-400'}`}>
-                                                            {isConversion ? 'Convert to Ordinary' : 'Keep Preference'}
-                                                        </span>
-                                                    </div>
-                                                </div>
-                                                <div className="text-right">
-                                                    <div className="text-white font-mono font-bold">{formatCurrency(Math.max(analysis.valueAsPref, analysis.valueAsConverted))}</div>
-                                                    <div className="text-xs text-slate-400">Net Gain: +{formatCurrency(difference)}</div>
-                                                </div>
+                    {/* STANDARD VIEW */}
+                    {!sensitivityAnalysisEnabled && (
+                        <div className="space-y-8 animate-in fade-in duration-300">
+
+                            {/* Conversion Analysis (Top priority) */}
+                            {conversionAnalysis && conversionAnalysis.length > 0 && (
+                                <div className="bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900 p-6 rounded-2xl shadow-xl border border-slate-700/50 overflow-hidden relative">
+                                    <div className="absolute inset-0 opacity-5" style={{ backgroundImage: `radial-gradient(circle at 2px 2px, white 1px, transparent 0)`, backgroundSize: '24px 24px' }}></div>
+                                    <div className="relative flex items-center justify-between mb-6">
+                                        <div className="flex items-center gap-3">
+                                            <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-amber-400 to-orange-500 flex items-center justify-center shadow-lg shadow-orange-500/20">
+                                                <span className="text-2xl">⚖️</span>
+                                            </div>
+                                            <div>
+                                                <h3 className="text-xl font-bold text-white">Conversion Analysis</h3>
+                                                <p className="text-slate-400 text-sm">Optimal path decision for Preferred Shares</p>
                                             </div>
                                         </div>
-                                    );
-                                })}
-                            </div>
-                        </div>
-                    )}
-
-                    {/* Sensitivity Analysis Results (if enabled) */}
-                    {sensitivityAnalysisEnabled && (
-                        <div className="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm animate-in fade-in slide-in-from-bottom-4 duration-500">
-                            <div className="flex items-center justify-between mb-6">
-                                <h3 className="text-lg font-bold text-slate-800">Sensitivity Matrix</h3>
-                                <div className="flex gap-2">
-                                    <span className="text-xs bg-slate-100 px-2 py-1 rounded text-slate-600 border border-slate-200">
-                                        {sensitivityScenarioCount} Scenarios
-                                    </span>
+                                    </div>
+                                    <div className="grid grid-cols-1 gap-4">
+                                        {conversionAnalysis.map((analysis, index) => {
+                                            const isConversion = analysis.decision === 'Convert to Ordinary';
+                                            const difference = Math.abs(analysis.valueAsConverted - analysis.valueAsPref);
+                                            return (
+                                                <div key={analysis.shareClass} className={`relative rounded-xl p-5 border backdrop-blur-sm transition-all ${isConversion ? 'bg-purple-900/20 border-purple-500/30' : 'bg-blue-900/20 border-blue-500/30'}`}>
+                                                    <div className="flex items-center justify-between">
+                                                        <div className="flex items-center gap-4">
+                                                            <div className={`px-3 py-1.5 rounded-lg font-bold text-sm ${isConversion ? 'bg-purple-500/20 text-purple-300' : 'bg-blue-500/20 text-blue-300'}`}>
+                                                                {analysis.shareClass}
+                                                            </div>
+                                                            <div className="flex items-center gap-2">
+                                                                <span className="text-slate-400 text-sm">Best Option:</span>
+                                                                <span className={`font-bold ${isConversion ? 'text-purple-400' : 'text-blue-400'}`}>
+                                                                    {isConversion ? 'Convert to Ordinary' : 'Keep Preference'}
+                                                                </span>
+                                                            </div>
+                                                        </div>
+                                                        <div className="text-right">
+                                                            <div className="text-white font-mono font-bold">{formatCurrency(Math.max(analysis.valueAsPref, analysis.valueAsConverted))}</div>
+                                                            <div className="text-xs text-slate-400">Net Gain: +{formatCurrency(difference)}</div>
+                                                        </div>
+                                                    </div>
+                                                </div>
+                                            );
+                                        })}
+                                    </div>
                                 </div>
-                            </div>
-                            <MultiExitComparison
-                                scenarios={sensitivityScenarios}
-                                capTable={capTable}
-                            />
-                        </div>
-                    )}
+                            )}
 
-                    {/* Standard Waterfall Results */}
-                    {!sensitivityAnalysisEnabled && (
-                        <div className="space-y-8">
                             {/* Chart Section */}
                             <div className="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm">
                                 <div className="flex items-center justify-between mb-6">

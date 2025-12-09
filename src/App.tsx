@@ -203,7 +203,7 @@ const initialEarnoutConfig: EarnoutConfig = {
 
 
 function App() {
-  const [activeTab, setActiveTab] = useState<'captable' | 'waterfall' | 'earnout'>('captable');
+  const [activeTab, setActiveTab] = useState<'captable' | 'waterfall' | 'earnout' | 'sensitivity'>('captable');
   const [capTable, setCapTable] = useState<CapTable>(initialCapTable);
   const [earnoutConfig, setEarnoutConfig] = useState<EarnoutConfig>(initialEarnoutConfig);
   const [history, setHistory] = useState<AppState[]>([]);
@@ -213,6 +213,7 @@ function App() {
   const [locale, setLocale] = useState<Locale>('fr-FR');
   const [carveOutPercent, setCarveOutPercent] = useState(0);
   const [carveOutBeneficiary, setCarveOutBeneficiary] = useState<CarveOutBeneficiary>('everyone');
+  const [isSensitivityEnabled, setIsSensitivityEnabled] = useState(false);
 
   const capTableState = calculateCapTableState(capTable);
   const { postMoneyValuation, summary: capTableSummary } = capTableState;
@@ -583,7 +584,23 @@ function App() {
             {!isSidebarCollapsed && <span className="font-medium whitespace-nowrap">Waterfall Analysis</span>}
           </button>
 
-          {earnoutConfig.enabled && (
+          {/* Sensitivity Analysis Tab Link - Only visible if enabled */}
+          {isSensitivityEnabled && (
+            <button
+              onClick={() => setActiveTab('sensitivity')}
+              className={`w-full flex items-center gap-3 px-4 py-3 rounded-lg transition-colors ${activeTab === 'sensitivity'
+                ? 'bg-blue-600 text-white shadow-lg shadow-blue-900/20'
+                : 'text-slate-400 hover:bg-slate-800 hover:text-white'
+                } ${isSidebarCollapsed ? 'justify-center px-2' : ''}`}
+              title={isSidebarCollapsed ? "Sensitivity Analysis" : ""}
+            >
+              <TrendingUp className="w-5 h-5 flex-shrink-0" /> {/* Reuse icon or pick new one like Activity or BarChart2 */}
+              {!isSidebarCollapsed && <span className="font-medium whitespace-nowrap">Sensitivity Analysis</span>}
+            </button>
+          )}
+
+          {/* Sensitivity Tab (Earn-out is typically last) */}
+          {earnoutConfig.enabled && ( // Optional: Keep earnout button logic or separate
             <button
               onClick={() => setActiveTab('earnout')}
               className={`w-full flex items-center gap-3 px-4 py-3 rounded-lg transition-colors ${activeTab === 'earnout'
@@ -597,28 +614,55 @@ function App() {
             </button>
           )}
 
-          <div className={`mt-4 pt-4 border-t border-slate-800 ${isSidebarCollapsed ? 'flex justify-center px-0' : 'px-4'}`}>
-            <label className={`flex items-center cursor-pointer group ${isSidebarCollapsed ? 'justify-center' : 'justify-between'}`}>
-              {!isSidebarCollapsed && <span className="text-sm font-medium text-slate-400 group-hover:text-slate-300">Activer Earn-out</span>}
-              <div className="relative inline-flex items-center cursor-pointer">
-                <input
-                  type="checkbox"
-                  className="sr-only peer"
-                  checked={earnoutConfig.enabled}
-                  onChange={(e) => {
-                    const enabled = e.target.checked;
-                    handleEarnoutConfigUpdate({ ...earnoutConfig, enabled });
-                    if (enabled) {
-                      setActiveTab('earnout');
-                    } else if (activeTab === 'earnout') {
-                      setActiveTab('waterfall');
-                    }
-                  }}
-                />
-                <div className="w-9 h-5 bg-slate-700 peer-focus:outline-none peer-focus:ring-2 peer-focus:ring-blue-600 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-blue-600"></div>
-              </div>
-            </label>
-          </div>
+
+          {!isSidebarCollapsed && (
+            <div className={`mt-4 pt-4 border-t border-slate-800 px-4 space-y-4`}>
+              {/* Activer Sensitivity Toggle */}
+              <label className="flex items-center justify-between cursor-pointer group">
+                <span className="text-sm font-medium text-slate-400 group-hover:text-slate-300">Activer Sensitivity</span>
+                <div className="relative inline-flex items-center cursor-pointer">
+                  <input
+                    type="checkbox"
+                    className="sr-only peer"
+                    checked={isSensitivityEnabled}
+                    onChange={(e) => {
+                      const enabled = e.target.checked;
+                      setIsSensitivityEnabled(enabled);
+                      if (enabled) {
+                        setActiveTab('sensitivity');
+                      } else if (activeTab === 'sensitivity') {
+                        setActiveTab('waterfall');
+                      }
+                    }}
+                  />
+                  {/* Using a different color (Indigo) for Sensitivity to distinguish */}
+                  <div className="w-9 h-5 bg-slate-700 peer-focus:outline-none peer-focus:ring-2 peer-focus:ring-indigo-500 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-indigo-500"></div>
+                </div>
+              </label>
+
+              {/* Activer Earn-out Toggle */}
+              <label className="flex items-center justify-between cursor-pointer group">
+                <span className="text-sm font-medium text-slate-400 group-hover:text-slate-300">Activer Earn-out</span>
+                <div className="relative inline-flex items-center cursor-pointer">
+                  <input
+                    type="checkbox"
+                    className="sr-only peer"
+                    checked={earnoutConfig.enabled}
+                    onChange={(e) => {
+                      const enabled = e.target.checked;
+                      handleEarnoutConfigUpdate({ ...earnoutConfig, enabled });
+                      if (enabled) {
+                        setActiveTab('earnout');
+                      } else if (activeTab === 'earnout') {
+                        setActiveTab('waterfall');
+                      }
+                    }}
+                  />
+                  <div className="w-9 h-5 bg-slate-700 peer-focus:outline-none peer-focus:ring-2 peer-focus:ring-blue-600 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-blue-600"></div>
+                </div>
+              </label>
+            </div>
+          )}
         </nav>
       </aside>
 
@@ -627,7 +671,10 @@ function App() {
         {/* Header */}
         <header className="h-16 bg-white border-b border-slate-200 flex items-center justify-between px-8 shadow-sm z-10">
           <h2 className="text-xl font-semibold text-slate-800">
-            {activeTab === 'captable' ? 'Cap Table Management' : activeTab === 'waterfall' ? 'Waterfall Analysis' : 'Earn-out Configuration'}
+            {activeTab === 'captable' ? 'Cap Table Management' :
+              activeTab === 'waterfall' ? 'Waterfall Analysis' :
+                activeTab === 'sensitivity' ? 'Sensitivity Analysis' :
+                  'Earn-out Configuration'}
           </h2>
           <div className="flex items-center gap-3">
             <LocaleSelector currentLocale={locale} onChange={setLocale} />
@@ -738,6 +785,23 @@ function App() {
                 earnoutEnabled={earnoutConfig.enabled}
                 earnoutUpfront={earnoutConfig.generalParams.upfrontPayment}
                 earnoutMax={earnoutConfig.generalParams.earnoutMax}
+                viewMode="waterfall"
+              />
+            ) : activeTab === 'sensitivity' ? (
+              <WaterfallView
+                capTable={capTable}
+                exitValuation={exitValuation}
+                onExitValuationChange={setExitValuation}
+                preferences={preferences}
+                setPreferences={handlePreferencesUpdate}
+                carveOutPercent={carveOutPercent}
+                setCarveOutPercent={handleCarveOutPercentUpdate}
+                carveOutBeneficiary={carveOutBeneficiary}
+                setCarveOutBeneficiary={handleCarveOutBeneficiaryUpdate}
+                earnoutEnabled={earnoutConfig.enabled}
+                earnoutUpfront={earnoutConfig.generalParams.upfrontPayment}
+                earnoutMax={earnoutConfig.generalParams.earnoutMax}
+                viewMode="sensitivity"
               />
             ) : (
               <EarnoutView
