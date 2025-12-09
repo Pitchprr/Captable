@@ -1,6 +1,5 @@
 import React from 'react';
-import { TrendingUp, Hash, ArrowRightLeft } from 'lucide-react';
-import { Input } from '../ui/Input';
+import { Settings2 } from 'lucide-react';
 import { formatCurrency } from '../../utils';
 
 interface ExitScenariosConfigProps {
@@ -25,86 +24,79 @@ export const ExitScenariosConfig: React.FC<ExitScenariosConfigProps> = ({
     );
 
     return (
-        <div className="bg-gradient-to-br from-indigo-50 to-blue-50 border border-indigo-100 rounded-xl p-6">
-            <div className="flex items-center gap-3 mb-6">
-                <div className="w-10 h-10 rounded-lg bg-indigo-600 flex items-center justify-center text-white shadow-lg shadow-indigo-200">
-                    <TrendingUp className="w-6 h-6" />
-                </div>
-                <div>
-                    <h3 className="text-lg font-bold text-indigo-950">Sensitivity Analysis Config</h3>
-                    <p className="text-sm text-indigo-600/80">Configure Exit Scenarios</p>
-                </div>
-            </div>
-
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                {/* Scenario Count */}
-                <div className="bg-white p-4 rounded-lg shadow-sm border border-indigo-100">
-                    <div className="flex items-center gap-2 mb-2">
-                        <Hash className="w-4 h-4 text-indigo-500" />
-                        <label className="text-sm font-semibold text-slate-700">Number of Scenarios</label>
-                    </div>
-                    <Input
-                        type="number"
-                        min="2"
-                        max="20"
-                        value={scenarioCount}
-                        onChange={(e) => setScenarioCount(Math.min(20, Math.max(2, Number(e.target.value))))}
-                        className="font-mono text-lg"
-                    />
-                    <div className="mt-2 text-xs text-slate-500 flex justify-between">
-                        <span>Min: 2</span>
-                        <span>Max: 20</span>
-                    </div>
+        <div className="flex flex-col gap-4">
+            <div className="flex items-center gap-4 bg-slate-50 p-4 rounded-xl border border-slate-200 shadow-sm relative overflow-hidden group hover:border-indigo-300 transition-colors">
+                {/* Decorative background element */}
+                <div className="absolute top-0 right-0 p-4 opacity-5 pointer-events-none text-indigo-900">
+                    <Settings2 className="w-16 h-16 transform rotate-12" />
                 </div>
 
-                {/* Step Size */}
-                <div className="bg-white p-4 rounded-lg shadow-sm border border-indigo-100">
-                    <div className="flex items-center gap-2 mb-2">
-                        <ArrowRightLeft className="w-4 h-4 text-indigo-500" />
-                        <label className="text-sm font-semibold text-slate-700">Step Size (Interval)</label>
+                {/* Scenarios Slider Control */}
+                <div className="flex-1 z-10">
+                    <div className="flex justify-between items-center mb-2">
+                        <label className="text-[10px] uppercase font-bold text-slate-500 tracking-wider">
+                            Range of Scenarios
+                        </label>
+                        <span className="bg-white px-2 py-0.5 rounded text-xs font-bold text-indigo-600 border border-indigo-100 shadow-sm">
+                            {scenarioCount}
+                        </span>
                     </div>
-                    <div className="relative">
-                        <Input
+                    <div className="relative h-6 flex items-center">
+                        <input
+                            type="range"
+                            min="2"
+                            max="20"
+                            step="1"
+                            value={scenarioCount}
+                            onChange={(e) => setScenarioCount(Number(e.target.value))}
+                            className="w-full accent-indigo-600 h-1.5 bg-slate-200 rounded-lg appearance-none cursor-pointer focus:outline-none focus:ring-2 focus:ring-indigo-500/20"
+                        />
+                    </div>
+                    <div className="flex justify-between text-[10px] text-slate-400 px-1">
+                        <span>2</span>
+                        <span>20</span>
+                    </div>
+                </div>
+
+                <div className="w-px h-12 bg-slate-200 mx-1 hidden sm:block"></div>
+
+                {/* Step Size Input */}
+                <div className="w-32 z-10 flex flex-col">
+                    <label className="text-[10px] uppercase font-bold text-slate-500 tracking-wider mb-1.5">
+                        Step Interval
+                    </label>
+                    <div className="relative group/input">
+                        <input
                             type="number"
                             min="0"
                             step="1000000"
                             value={stepSize}
                             onChange={(e) => setStepSize(Number(e.target.value))}
-                            className="font-mono text-lg"
+                            className="w-full bg-white border border-slate-200 text-slate-700 text-sm font-semibold rounded-lg px-2 py-1.5 focus:outline-none focus:border-indigo-400 focus:ring-2 focus:ring-indigo-500/10 transition-all pr-8"
                         />
-                        <div className="absolute right-3 top-2.5 text-slate-400 text-sm pointer-events-none">
-                            {formatCurrency(stepSize)}
+                        <div className="absolute right-2 top-1.5 text-xs text-slate-400 pointer-events-none font-medium">
+                            €
                         </div>
                     </div>
-                    <div className="mt-2 text-xs text-slate-500">
-                        Added to base exit (€{formatCurrency(baseExitValue)}) for each step
+                    <div className="text-[10px] text-slate-400 mt-1 font-medium truncate">
+                        {formatCurrency(stepSize)}
                     </div>
                 </div>
             </div>
 
-            {/* Preview Strip */}
-            <div className="mt-6">
-                <div className="text-xs font-semibold text-indigo-800 uppercase tracking-wider mb-3">Preview Series</div>
-                <div className="flex flex-wrap gap-2">
-                    {previewScenarios.map((val, idx) => (
-                        <div key={idx} className="flex items-center">
-                            <div className="px-3 py-1.5 bg-white border border-indigo-200 rounded-md shadow-sm text-sm font-mono text-indigo-700 font-medium">
-                                {formatCurrency(val)}
-                            </div>
-                            {idx < previewScenarios.length - 1 && (
-                                <div className="w-4 h-0.5 bg-indigo-200 mx-1"></div>
-                            )}
-                        </div>
-                    ))}
-                    {scenarioCount > 5 && (
-                        <div className="flex items-center">
-                            <div className="w-4 h-0.5 bg-indigo-200 mx-1"></div>
-                            <div className="px-3 py-1.5 bg-indigo-100/50 border border-indigo-200/50 rounded-md text-sm text-indigo-400 font-medium italic">
-                                + {scenarioCount - 5} more...
-                            </div>
-                        </div>
-                    )}
-                </div>
+            {/* Compact Preview Strip */}
+            <div className="flex flex-wrap items-center gap-2 px-1">
+                <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wide">Preview:</span>
+                {previewScenarios.map((val, idx) => (
+                    <div key={idx} className="bg-white border border-slate-200 px-2 py-0.5 rounded text-[10px] font-mono font-medium text-slate-600 whitespace-nowrap">
+                        {formatCurrency(val)}
+                    </div>
+                ))}
+                {scenarioCount > 5 && (
+                    <span className="text-[10px] text-slate-400 italic">
+                        +{scenarioCount - 5} more
+                    </span>
+                )}
             </div>
         </div>
     );

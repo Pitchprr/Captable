@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import type { CapTable, LiquidationPreference, CarveOutBeneficiary, EarnoutConfig } from './engine/types';
 import { calculateCapTableState } from './engine/CapTableEngine';
-import { LayoutDashboard, PieChart, TrendingUp, Download, Undo2, Redo2, Share2, Check, Save, Coins } from 'lucide-react';
+import { LayoutDashboard, PieChart, TrendingUp, Download, Undo2, Redo2, Share2, Check, Save, Coins, ChevronLeft, ChevronRight } from 'lucide-react';
 import { EarnoutView } from './components/earnout/EarnoutView';
 import { CapTableView } from './components/captable/CapTableView';
 import { FounderSetup } from './components/captable/FounderSetup';
@@ -220,6 +220,7 @@ function App() {
   const [isResetModalOpen, setIsResetModalOpen] = useState(false);
   const [shareUrlCopied, setShareUrlCopied] = useState(false);
   const [isLoadingFromPersistence, setIsLoadingFromPersistence] = useState(true);
+  const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
 
   // Persistence hook
   const { copyShareUrl, save, lastSaveTime } = useCapTablePersistence(
@@ -519,23 +520,30 @@ function App() {
       />
 
       {/* Sidebar */}
-      <aside className="w-64 bg-slate-900 text-white flex flex-col">
-        <div className="p-6 border-b border-slate-800">
-          <div className="flex items-center gap-3">
-            <div className="w-8 h-8 bg-blue-500 rounded-lg flex items-center justify-center">
+      <aside className={`${isSidebarCollapsed ? 'w-20' : 'w-64'} bg-slate-900 text-white flex flex-col transition-all duration-300 relative`}>
+        <button
+          onClick={() => setIsSidebarCollapsed(!isSidebarCollapsed)}
+          className="absolute -right-3 top-20 bg-slate-800 text-slate-400 hover:text-white p-1 rounded-full border border-slate-700 shadow-sm z-50"
+        >
+          {isSidebarCollapsed ? <ChevronRight className="w-4 h-4" /> : <ChevronLeft className="w-4 h-4" />}
+        </button>
+
+        <div className={`p-6 border-b border-slate-800 ${isSidebarCollapsed ? 'items-center justify-center px-4' : ''}`}>
+          <div className={`flex items-center gap-3 ${isSidebarCollapsed ? 'justify-center' : ''}`}>
+            <div className="w-8 h-8 bg-blue-500 rounded-lg flex items-center justify-center flex-shrink-0">
               <PieChart className="w-5 h-5 text-white" />
             </div>
-            <h1 className="text-lg font-bold tracking-tight">CapTable.io</h1>
+            {!isSidebarCollapsed && <h1 className="text-lg font-bold tracking-tight">CapTable.io</h1>}
           </div>
         </div>
 
-        {capTable.startupName && (
-          <p className="text-xl font-semibold text-white text-center mb-2">
+        {!isSidebarCollapsed && capTable.startupName && (
+          <p className="text-xl font-semibold text-white text-center mb-2 animate-in fade-in">
             {capTable.startupName}
           </p>
         )}
 
-        <div className="px-6 py-4 border-b border-slate-800 space-y-4">
+        <div className={`px-6 py-4 border-b border-slate-800 space-y-4 ${isSidebarCollapsed ? 'hidden' : 'block'}`}>
           <div>
             <p className="text-xs text-slate-400 uppercase font-semibold mb-1">Total Raised</p>
             <p className="text-xl font-bold text-blue-400">
@@ -556,10 +564,11 @@ function App() {
             className={`w-full flex items-center gap-3 px-4 py-3 rounded-lg transition-colors ${activeTab === 'captable'
               ? 'bg-blue-600 text-white shadow-lg shadow-blue-900/20'
               : 'text-slate-400 hover:bg-slate-800 hover:text-white'
-              }`}
+              } ${isSidebarCollapsed ? 'justify-center px-2' : ''}`}
+            title={isSidebarCollapsed ? "Cap Table" : ""}
           >
-            <LayoutDashboard className="w-5 h-5" />
-            <span className="font-medium">Cap Table</span>
+            <LayoutDashboard className="w-5 h-5 flex-shrink-0" />
+            {!isSidebarCollapsed && <span className="font-medium whitespace-nowrap">Cap Table</span>}
           </button>
 
           <button
@@ -567,10 +576,11 @@ function App() {
             className={`w-full flex items-center gap-3 px-4 py-3 rounded-lg transition-colors ${activeTab === 'waterfall'
               ? 'bg-blue-600 text-white shadow-lg shadow-blue-900/20'
               : 'text-slate-400 hover:bg-slate-800 hover:text-white'
-              }`}
+              } ${isSidebarCollapsed ? 'justify-center px-2' : ''}`}
+            title={isSidebarCollapsed ? "Waterfall Analysis" : ""}
           >
-            <TrendingUp className="w-5 h-5" />
-            <span className="font-medium">Waterfall Analysis</span>
+            <TrendingUp className="w-5 h-5 flex-shrink-0" />
+            {!isSidebarCollapsed && <span className="font-medium whitespace-nowrap">Waterfall Analysis</span>}
           </button>
 
           {earnoutConfig.enabled && (
@@ -579,16 +589,17 @@ function App() {
               className={`w-full flex items-center gap-3 px-4 py-3 rounded-lg transition-colors ${activeTab === 'earnout'
                 ? 'bg-blue-600 text-white shadow-lg shadow-blue-900/20'
                 : 'text-slate-400 hover:bg-slate-800 hover:text-white'
-                }`}
+                } ${isSidebarCollapsed ? 'justify-center px-2' : ''}`}
+              title={isSidebarCollapsed ? "Earn-out" : ""}
             >
-              <Coins className="w-5 h-5" />
-              <span className="font-medium">Earn-out</span>
+              <Coins className="w-5 h-5 flex-shrink-0" />
+              {!isSidebarCollapsed && <span className="font-medium whitespace-nowrap">Earn-out</span>}
             </button>
           )}
 
-          <div className="mt-4 px-4 pt-4 border-t border-slate-800">
-            <label className="flex items-center justify-between cursor-pointer group">
-              <span className="text-sm font-medium text-slate-400 group-hover:text-slate-300">Activer Earn-out</span>
+          <div className={`mt-4 pt-4 border-t border-slate-800 ${isSidebarCollapsed ? 'flex justify-center px-0' : 'px-4'}`}>
+            <label className={`flex items-center cursor-pointer group ${isSidebarCollapsed ? 'justify-center' : 'justify-between'}`}>
+              {!isSidebarCollapsed && <span className="text-sm font-medium text-slate-400 group-hover:text-slate-300">Activer Earn-out</span>}
               <div className="relative inline-flex items-center cursor-pointer">
                 <input
                   type="checkbox"
@@ -609,8 +620,6 @@ function App() {
             </label>
           </div>
         </nav>
-
-
       </aside>
 
       {/* Main Content */}
@@ -705,8 +714,8 @@ function App() {
           </div>
         </header>
 
-        <div className="flex-1 overflow-auto p-8">
-          <div className="max-w-7xl mx-auto">
+        <div className="flex-1 overflow-auto p-4 md:p-6">
+          <div className="h-full">
 
 
             {activeTab === 'captable' ? (

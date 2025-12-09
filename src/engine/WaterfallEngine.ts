@@ -180,10 +180,18 @@ export const calculateWaterfall = (
                 effectivePreferences.push(pref);
             }
 
+            // For Participating Preferred, the theoretical value is Pref + Participation on REMAINING proceeds
+            // We calculate participation based on what's left after all preferences are paid (conservative estimate)
+            const estimatedParticipation = (classShares / totalFullyDilutedShares) * remainingForPrefAnalysis;
+
+            const estimatedTotalValue = pref.type === 'Participating'
+                ? actualPrefPayout + estimatedParticipation
+                : actualPrefPayout;
+
             conversionAnalysis.push({
                 shareClass: round.shareClass,
                 totalShares: classShares,
-                valueAsPref: actualPrefPayout, // Show ACTUAL payout, not claim
+                valueAsPref: estimatedTotalValue,
                 valueAsConverted: conversionValue,
                 decision: decision,
                 reason: reason
