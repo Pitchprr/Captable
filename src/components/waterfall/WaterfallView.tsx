@@ -8,7 +8,7 @@ import { Input } from '../ui/Input';
 import { FormattedNumberInput } from '../ui/FormattedNumberInput';
 import { PreferenceConfig } from './PreferenceConfig';
 import { WATERFALL_COLORS } from '../../theme';
-import { ExitScenariosConfig } from './ExitScenariosConfig';
+import { SensitivityDashboard } from './SensitivityDashboard';
 import { MultiExitComparison } from './MultiExitComparison';
 
 interface WaterfallViewProps {
@@ -58,8 +58,9 @@ export const WaterfallView: React.FC<WaterfallViewProps> = ({
 
     // Sensitivity Analysis State
     // Controlled by viewMode prop now mostly, but we keep params here
-    const [sensitivityScenarioCount, setSensitivityScenarioCount] = useState(5);
-    const [sensitivityStepSize, setSensitivityStepSize] = useState(5000000);
+
+    const [simCount, setSimCount] = useState(5);
+    const [simStepAmount, setSimStepAmount] = useState(5000000); // Default 5M step
 
     const sensitivityAnalysisEnabled = viewMode === 'sensitivity';
 
@@ -95,20 +96,25 @@ export const WaterfallView: React.FC<WaterfallViewProps> = ({
         [capTable, effectiveExitValuation, preferences, maConfig]
     );
 
-    // Calculate Sensitivity Scenarios
-    const sensitivityScenarios = useMemo(() => {
-        if (!sensitivityAnalysisEnabled) return [];
-        // Start from current valuation (Base)
-        return Array.from({ length: sensitivityScenarioCount }, (_, i) => {
-            // i=0 -> Current EV
-            // i=1 -> Current EV + Step
-            const ev = Math.max(0, effectiveExitValuation + i * sensitivityStepSize);
-            return {
+    // Multi-Exit Scenarios Calculation (Dynamic)
+    const multiScenarioData = useMemo(() => {
+        if (sensitivityAnalysisEnabled) return [];
+
+        const scenarios: { exitValue: number; result: any }[] = [];
+        // Generate scenarios starting from Current EV and increasing
+        for (let i = 0; i < simCount; i++) {
+            const ev = effectiveExitValuation + (i * simStepAmount);
+
+            scenarios.push({
                 exitValue: ev,
                 result: calculateWaterfall(capTable, ev, preferences, maConfig)
-            };
-        });
-    }, [sensitivityAnalysisEnabled, sensitivityScenarioCount, sensitivityStepSize, effectiveExitValuation, capTable, preferences, maConfig]);
+            });
+        }
+
+        return scenarios;
+    }, [capTable, effectiveExitValuation, preferences, maConfig, sensitivityAnalysisEnabled, simCount, simStepAmount]);
+
+
 
     const chartData = useMemo(() => {
         const dataMap = new Map<string, { name: string; Preference: number; Participation: number; CarveOut: number; Invested: number; order: number }>();
@@ -167,16 +173,16 @@ export const WaterfallView: React.FC<WaterfallViewProps> = ({
     const hasPrefPayouts = payouts.some(p => p.preferencePayout > 0);
 
     return (
-        <div className="space-y-8">
-            <div className="grid grid-cols-1 lg:grid-cols-3 gap-8 items-start">
+        <div className="space-y-4">
+            <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 items-start">
                 {/* Configuration Panel - Left Side */}
-                <div className="lg:col-span-1 space-y-6 self-start">
+                <div className="lg:col-span-1 space-y-4 self-start">
 
                     {/* Exit Scenario */}
-                    <div className="bg-white p-6 rounded-xl border border-slate-200 shadow-sm">
-                        <div className="flex items-center justify-between mb-4">
-                            <h3 className="text-lg font-semibold text-slate-800">Exit Scenario</h3>
-                            {earnoutEnabled && <span className="text-xs bg-purple-100 text-purple-700 px-2 py-1 rounded-full font-medium">Earn-out On</span>}
+                    <div className="bg-white p-5 rounded-xl border border-slate-200 shadow-sm">
+                        <div className="flex items-center justify-between mb-3">
+                            <h3 className="text-base font-bold text-slate-800">Exit Scenario</h3>
+                            {earnoutEnabled && <span className="text-[10px] bg-purple-100 text-purple-700 px-2 py-0.5 rounded-full font-bold uppercase tracking-wide">Earn-out On</span>}
                         </div>
 
                         <div className="space-y-4">
@@ -264,7 +270,7 @@ export const WaterfallView: React.FC<WaterfallViewProps> = ({
                 </div>
 
                 {/* Results Panel - Right Side */}
-                <div className="lg:col-span-2 space-y-6">
+                <div className="lg:col-span-2 space-y-4">
                     {/* Header / Tab System */}
                     <div className="flex items-center justify-between border-b border-slate-200 pb-4">
                         <div className="flex items-center gap-4">
@@ -273,7 +279,7 @@ export const WaterfallView: React.FC<WaterfallViewProps> = ({
                             </h2>
                             {viewMode === 'sensitivity' && (
                                 <span className="px-3 py-1 bg-indigo-100 text-indigo-700 text-xs font-bold rounded-full border border-indigo-200">
-                                    Simulating {sensitivityScenarioCount} Scenarios
+                                    Simulating 4 Scenarios
                                 </span>
                             )}
                         </div>
@@ -282,31 +288,18 @@ export const WaterfallView: React.FC<WaterfallViewProps> = ({
                     {/* SENSITIVITY VIEW */}
                     {sensitivityAnalysisEnabled && (
                         <div className="space-y-6 animate-in fade-in slide-in-from-right-4 duration-300">
-                            {/* 1. Sensitivity Configuration (Moved from Left) */}
-                            <div className="bg-white p-6 rounded-xl border border-slate-200 shadow-sm">
-                                <div className="flex items-center gap-2 mb-4">
-                                    <Settings2 className="w-5 h-5 text-slate-500" />
-                                    <h3 className="font-semibold text-slate-700">Simulation Parameters</h3>
-                                </div>
-                                <ExitScenariosConfig
-                                    baseExitValue={effectiveExitValuation}
-                                    scenarioCount={sensitivityScenarioCount}
-                                    stepSize={sensitivityStepSize}
-                                    setScenarioCount={setSensitivityScenarioCount}
-                                    setStepSize={setSensitivityStepSize}
-                                />
-                            </div>
-
-                            {/* 2. Results Matrix */}
-                            <div className="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm">
-                                <div className="flex items-center justify-between mb-6">
-                                    <h3 className="text-lg font-bold text-slate-800">Payout Comparison</h3>
-                                </div>
-                                <MultiExitComparison
-                                    scenarios={sensitivityScenarios}
-                                    capTable={capTable}
-                                />
-                            </div>
+                            <SensitivityDashboard
+                                capTable={capTable}
+                                preferences={preferences}
+                                currentExitValuation={effectiveExitValuation}
+                                onExitValuationChange={onExitValuationChange}
+                                earnoutConfig={{
+                                    enabled: earnoutEnabled,
+                                    upfrontRatio: (earnoutUpfront + earnoutMax) > 0
+                                        ? earnoutUpfront / (earnoutUpfront + earnoutMax)
+                                        : 0.7 // Default if 0
+                                }}
+                            />
                         </div>
                     )}
 
@@ -456,6 +449,55 @@ export const WaterfallView: React.FC<WaterfallViewProps> = ({
                                         </tbody>
                                     </table>
                                 </div>
+                            </div>
+
+                            {/* Multi-Exit Simulation Tool */}
+                            <div className="bg-white rounded-2xl border border-slate-200 shadow-sm p-6">
+                                <div className="flex flex-col sm:flex-row sm:items-center justify-between mb-6 gap-4">
+                                    <div>
+                                        <div className="flex items-center gap-2 mb-1">
+                                            <TrendingUp className="w-5 h-5 text-indigo-600" />
+                                            <h3 className="text-lg font-bold text-slate-800">Exit Multiple Simulation</h3>
+                                        </div>
+                                        <p className="text-sm text-slate-500">
+                                            Simulate payouts across a range of Exit Valuations centered on your base case.
+                                        </p>
+                                    </div>
+
+                                    {/* Configuration Controls */}
+                                    <div className="flex items-center gap-3 bg-slate-50 p-2 rounded-lg border border-slate-200">
+                                        <div className="flex flex-col">
+                                            <label className="text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1">Scenarios</label>
+                                            <div className="flex bg-white rounded border border-slate-200 p-0.5">
+                                                {[3, 5, 7].map(n => (
+                                                    <button
+                                                        key={n}
+                                                        onClick={() => setSimCount(n)}
+                                                        className={`px-3 py-1 text-xs font-bold rounded transition-colors ${simCount === n ? 'bg-indigo-100 text-indigo-700' : 'text-slate-500 hover:text-slate-700'}`}
+                                                    >
+                                                        {n}
+                                                    </button>
+                                                ))}
+                                            </div>
+                                        </div>
+                                        <div className="w-px h-8 bg-slate-200 mx-1"></div>
+                                        <div className="flex flex-col min-w-[140px]">
+                                            <label className="text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1">Step Interval</label>
+                                            <div className="relative">
+                                                <FormattedNumberInput
+                                                    value={simStepAmount}
+                                                    onChange={setSimStepAmount}
+                                                    className="w-full h-7 pl-2 pr-8 text-xs font-bold border border-slate-200 rounded focus:ring-1 focus:ring-indigo-500"
+                                                />
+                                                <span className="absolute right-2 top-1/2 -translate-y-1/2 text-[10px] font-bold text-slate-400 pointer-events-none">EUR</span>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                                <MultiExitComparison
+                                    scenarios={multiScenarioData}
+                                    capTable={capTable}
+                                />
                             </div>
 
                             {/* Waterfall Steps Legend */}
