@@ -649,8 +649,8 @@ export const RoundManager: React.FC<RoundManagerProps> = ({ capTable, onUpdate, 
                                 </div>
 
                                 {/* Expanded Investments List */}
-                                <div className={`transition-all duration-500 ease-in-out overflow-hidden flex flex-col ${!isCollapsed ? 'max-h-[800px] opacity-100' : 'max-h-0 opacity-0'}`}>
-                                    <div className="p-4 flex-1 overflow-y-auto max-h-96">
+                                <div className={`transition-all duration-500 ease-in-out overflow-hidden flex flex-col ${!isCollapsed ? 'max-h-[3000px] opacity-100' : 'max-h-0 opacity-0'}`}>
+                                    <div className="p-4 flex-1">
                                         <h4 className="text-xs font-bold text-slate-400 uppercase mb-3">Investments</h4>
                                         <div className="space-y-3">
                                             <div className="flex justify-between items-center pb-2 border-b border-slate-100 mb-2">

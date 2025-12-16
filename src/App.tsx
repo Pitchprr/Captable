@@ -102,7 +102,7 @@ const initialCapTable: CapTable = {
       pricePerShare: 0,
       totalShares: 0,
       newSharesIssued: 0,
-      liquidationPreferenceMultiple: 1,
+      liquidationPreferenceMultiple: 1.5,
       isParticipating: false,
       investments: [
         { shareholderId: '5', amount: 5000000, shares: 0 } // 5M investment
@@ -119,7 +119,7 @@ const initialCapTable: CapTable = {
 };
 
 const initialEarnoutConfig: EarnoutConfig = {
-  enabled: true,
+  enabled: false,
   generalParams: {
     enterpriseValue: 50000000, // 50M€ - 2x la dernière valorisation post-money (25M)
     currency: 'EUR',
@@ -208,10 +208,10 @@ function App() {
   const [earnoutConfig, setEarnoutConfig] = useState<EarnoutConfig>(initialEarnoutConfig);
   const [history, setHistory] = useState<AppState[]>([]);
   const [historyIndex, setHistoryIndex] = useState<number>(-1);
-  const [exitValuation, setExitValuation] = useState<number>(50000000);
+  const [exitValuation, setExitValuation] = useState<number>(20000000);
   const [preferences, setPreferences] = useState<LiquidationPreference[]>([]);
   const [locale, setLocale] = useState<Locale>('fr-FR');
-  const [carveOutPercent, setCarveOutPercent] = useState(0);
+  const [carveOutPercent, setCarveOutPercent] = useState(5);
   const [carveOutBeneficiary, setCarveOutBeneficiary] = useState<CarveOutBeneficiary>('everyone');
   const [isSensitivityEnabled, setIsSensitivityEnabled] = useState(false);
 

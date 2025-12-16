@@ -74,8 +74,20 @@ export const CapTableView: React.FC<CapTableViewProps> = ({ capTable, setCapTabl
 
     return (
         <div className="space-y-8">
-            <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-                <div className="lg:col-span-1">
+            {/* 1. Funding Rounds (Priority) */}
+            <div className="w-full">
+                <RoundManager
+                    capTable={capTable}
+                    onUpdate={updateRounds}
+                    onCapTableUpdate={setCapTable}
+                    onGlobalCollapse={handleGlobalCollapse}
+                    onGlobalExpand={handleGlobalExpand}
+                />
+            </div>
+
+            {/* 2. Configuration (Shareholders & Option Pools) */}
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
+                <div>
                     <ShareholderManager
                         shareholders={capTable.shareholders}
                         onUpdate={updateShareholders}
@@ -83,27 +95,18 @@ export const CapTableView: React.FC<CapTableViewProps> = ({ capTable, setCapTabl
                         onToggleCollapse={() => setIsShareholdersCollapsed(!isShareholdersCollapsed)}
                     />
                 </div>
-                <div className="lg:col-span-2">
-                    <RoundManager
+                <div>
+                    <OptionPoolManager
                         capTable={capTable}
-                        onUpdate={updateRounds}
+                        onUpdate={updateOptionGrants}
+                        onUpdateRounds={updateRounds}
+                        onUpdateShareholders={updateShareholders}
                         onCapTableUpdate={setCapTable}
-                        onGlobalCollapse={handleGlobalCollapse}
-                        onGlobalExpand={handleGlobalExpand}
+                        isCollapsed={isOptionPoolsCollapsed}
+                        onToggleCollapse={() => setIsOptionPoolsCollapsed(!isOptionPoolsCollapsed)}
                     />
                 </div>
             </div>
-
-            {/* Option Pool Management */}
-            <OptionPoolManager
-                capTable={capTable}
-                onUpdate={updateOptionGrants}
-                onUpdateRounds={updateRounds}
-                onUpdateShareholders={updateShareholders}
-                onCapTableUpdate={setCapTable}
-                isCollapsed={isOptionPoolsCollapsed}
-                onToggleCollapse={() => setIsOptionPoolsCollapsed(!isOptionPoolsCollapsed)}
-            />
 
             <div className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
                 <div className="px-6 py-4 border-b border-slate-200 bg-slate-50 flex justify-between items-center">

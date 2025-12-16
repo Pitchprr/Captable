@@ -1,6 +1,6 @@
 import React, { useState, useMemo } from 'react';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip as RechartsTooltip, Legend, ResponsiveContainer } from 'recharts';
-import { Layers, CheckCircle2, X, HelpCircle, ChevronDown, Activity, PieChart, TrendingUp, AlertCircle, Settings2 } from 'lucide-react';
+import { TrendingUp, TrendingDown, Target, Rocket, HelpCircle, Layers, ChevronDown, Activity, ArrowDown, Droplets, Coins, AlertCircle, Settings2 } from 'lucide-react';
 import type { CapTable, LiquidationPreference, CarveOutBeneficiary, PayoutStructure, WaterfallStep } from '../../engine/types';
 import { calculateWaterfall } from '../../engine/WaterfallEngine';
 import { formatCurrency } from '../../utils';
@@ -43,7 +43,7 @@ export const WaterfallView: React.FC<WaterfallViewProps> = ({
     viewMode = 'waterfall'
 }) => {
     const [payoutStructure, setPayoutStructure] = useState<PayoutStructure>('standard');
-    const [expandedStep, setExpandedStep] = useState<WaterfallStep | null>(null);
+    const [expandedStepIndex, setExpandedStepIndex] = useState<number | null>(null);
 
     // M&A Enhancement States
     const [showMaConfig, setShowMaConfig] = useState(false);
@@ -500,85 +500,190 @@ export const WaterfallView: React.FC<WaterfallViewProps> = ({
                                 />
                             </div>
 
-                            {/* Waterfall Steps Legend */}
-                            <div className="bg-slate-50 rounded-xl border border-slate-200 p-6">
-                                <h3 className="font-bold text-slate-700 mb-4 flex items-center gap-2">
-                                    <Layers className="w-5 h-5 text-slate-500" />
-                                    Distribution Steps
+                            {/* Visualization of Waterfall Steps (Premium Timeline) */}
+                            <div className="py-6">
+                                <h3 className="font-bold text-slate-800 mb-8 flex items-center gap-2 text-xl">
+                                    <Layers className="w-6 h-6 text-blue-600" />
+                                    Cash Flow Distribution
                                 </h3>
-                                <div className="space-y-3">
-                                    {steps.map((step) => (
-                                        <div key={step.stepNumber} className="bg-white border border-slate-200 rounded-lg overflow-hidden shadow-sm">
-                                            <button
-                                                onClick={() => setExpandedStep(expandedStep?.stepNumber === step.stepNumber ? null : step)}
-                                                className="w-full px-4 py-3 flex items-center justify-between hover:bg-slate-50 transition-colors"
-                                            >
-                                                <div className="flex items-center gap-3">
-                                                    <span className="flex items-center justify-center w-6 h-6 rounded-full bg-slate-100 text-xs font-bold text-slate-600 border border-slate-200">
-                                                        {step.stepNumber}
-                                                    </span>
-                                                    <div className="text-left">
-                                                        <div className="text-sm font-medium text-slate-900">{step.stepName}</div>
-                                                        <div className="text-xs text-slate-500">{step.description}</div>
-                                                    </div>
-                                                </div>
-                                                <div className="flex items-center gap-4">
-                                                    <span className="font-mono font-bold text-slate-700">{formatCurrency(step.amount)}</span>
-                                                    <ChevronDown className={`w-4 h-4 text-slate-400 transition-transform ${expandedStep?.stepNumber === step.stepNumber ? 'rotate-180' : ''}`} />
-                                                </div>
-                                            </button>
+                                <div className="relative pl-4 sm:pl-8 space-y-0">
+                                    {/* Vertical Timeline Line */}
+                                    <div className="absolute left-4 sm:left-8 top-4 bottom-4 w-0.5 bg-gradient-to-b from-blue-200 to-indigo-50/0" />
 
-                                            {/* Expanded Detail View */}
-                                            {expandedStep?.stepNumber === step.stepNumber && step.details && (
-                                                <div className="border-t border-slate-100 bg-slate-50/50 p-4">
-                                                    {/* Calculation Logic Box */}
-                                                    <div className="bg-blue-50/50 border border-blue-100 rounded-lg p-3 mb-3 text-xs text-blue-800 font-mono">
-                                                        <div className="font-bold mb-1 flex items-center gap-2">
-                                                            <Activity className="w-3 h-3" />
-                                                            Logic Algorithm:
-                                                        </div>
-                                                        {step.details.calculation ? (
-                                                            <div className="space-y-1">
-                                                                <div>Type: {step.details.calculation.type}</div>
-                                                                {step.details.calculation.formula && <div>Formula: {step.details.calculation.formula}</div>}
-                                                                {step.details.calculation.valuation && <div>Valuation: {formatCurrency(step.details.calculation.valuation)}</div>}
-                                                                {step.details.calculation.pricePerShare && <div>PPS: {formatCurrency(step.details.calculation.pricePerShare)}</div>}
+                                    {steps.map((step, index) => {
+                                        const isLast = index === steps.length - 1;
+                                        const percentOfTotal = (step.amount / effectiveExitValuation) * 100;
+
+                                        return (
+                                            <div key={step.stepNumber} className="relative pb-8 group">
+                                                {/* Timeline Node */}
+                                                <div className="absolute -left-[21px] sm:-left-[21px] top-6 w-11 h-11 rounded-full bg-white border-4 border-blue-50 shadow-md z-10 flex items-center justify-center">
+                                                    <span className="text-sm font-bold text-blue-600">{step.stepNumber}</span>
+                                                </div>
+
+                                                {/* Step Card */}
+                                                <div className="ml-8 sm:ml-10 bg-white rounded-2xl border border-slate-200 shadow-sm hover:shadow-md transition-all duration-300 overflow-hidden">
+                                                    {/* Header */}
+                                                    <button
+                                                        onClick={() => setExpandedStepIndex(expandedStepIndex === index ? null : index)}
+                                                        className="w-full text-left"
+                                                    >
+                                                        <div className="p-5 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                                                            <div className="flex items-center gap-4">
+                                                                <div className={`p-3 rounded-xl ${step.amount > 0 ? 'bg-blue-50 text-blue-600' : 'bg-slate-50 text-slate-400'}`}>
+                                                                    {step.stepName.includes('Preference') ? <Coins className="w-6 h-6" /> : <Droplets className="w-6 h-6" />}
+                                                                </div>
+                                                                <div>
+                                                                    <h4 className="font-bold text-slate-800 text-lg">{step.stepName}</h4>
+                                                                    <p className="text-sm text-slate-500">{step.description}</p>
+                                                                </div>
                                                             </div>
-                                                        ) : (
-                                                            <div>Standard pro-rata distribution amongst eligible shareholders.</div>
-                                                        )}
-                                                    </div>
+                                                            <div className="text-right min-w-[120px]">
+                                                                <div className="text-2xl font-bold text-slate-900 tracking-tight">{formatCurrency(step.amount)}</div>
+                                                                <div className="text-xs font-medium text-slate-400 uppercase tracking-wide">Distributed</div>
+                                                            </div>
+                                                        </div>
 
-                                                    <div className="grid grid-cols-2 gap-4">
-                                                        <div>
-                                                            <h5 className="text-[10px] uppercase font-bold text-slate-400 mb-2">Recipients</h5>
-                                                            <div className="space-y-1">
-                                                                {step.details.shareholders.map((s, idx) => (
-                                                                    <div key={idx} className="flex justify-between text-xs border-b border-slate-100 pb-1 last:border-0">
-                                                                        <span className="text-slate-600">{s.name}</span>
-                                                                        <span className="font-mono text-slate-900">{formatCurrency(s.amount)}</span>
+                                                        {/* Visual Progress Bar */}
+                                                        <div className="w-full bg-slate-50 h-1.5 mt-0 relative">
+                                                            <div
+                                                                className="absolute top-0 left-0 h-full bg-gradient-to-r from-blue-500 to-indigo-500 transition-all duration-1000 ease-out"
+                                                                style={{ width: `${Math.max(percentOfTotal, 0)}%` }}
+                                                            />
+                                                        </div>
+                                                    </button>
+
+                                                    {/* Expanded Details */}
+                                                    {/* Expanded Details */}
+                                                    <div className={`transition-all duration-300 ease-in-out border-t border-slate-50 bg-slate-50/50 ${expandedStepIndex === index ? 'max-h-[800px] opacity-100' : 'max-h-0 opacity-0 overflow-hidden'}`}>
+                                                        <div className="p-5">
+                                                            {/* Enhanced Logic & Calculation */}
+                                                            <div className="bg-white border border-blue-100 rounded-lg p-4 mb-4 shadow-sm">
+                                                                <div className="flex items-center gap-2 font-bold text-blue-700 mb-3 pb-2 border-b border-blue-50">
+                                                                    <Activity className="w-4 h-4" />
+                                                                    Calculation Details
+                                                                </div>
+
+                                                                {/* Dynamic Explanation based on Step Type */}
+                                                                <div className="space-y-4">
+                                                                    {step.stepName.includes('Liquidation Preference') && (() => {
+                                                                        // Try to find the matching round to display real settings
+                                                                        const linkedRound = capTable.rounds.find(r => step.stepName.toLowerCase().includes(r.name.toLowerCase()));
+                                                                        const multiple = linkedRound?.liquidationPreferenceMultiple || 1;
+                                                                        const isParticipating = linkedRound?.isParticipating || false;
+
+                                                                        return (
+                                                                            <>
+                                                                                <div className="text-sm text-slate-600 bg-blue-50/50 p-3 rounded border border-blue-100 italic flex justify-between items-start">
+                                                                                    <span>"Priority payout for <strong>{linkedRound ? linkedRound.name : 'Investors'}</strong> based on their investment terms."</span>
+                                                                                </div>
+                                                                                <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-xs">
+                                                                                    <div>
+                                                                                        <span className="font-bold text-slate-500 uppercase block mb-1">Round Settings ({linkedRound?.name || 'Unknown'})</span>
+                                                                                        <ul className="space-y-1 text-slate-700 list-disc pl-4">
+                                                                                            <li><span className="font-medium">Total Invested:</span> {linkedRound?.investments ? formatCurrency(linkedRound.investments.reduce((sum, inv) => sum + inv.amount, 0)) : '-'}</li>
+                                                                                            <li><span className="font-medium">Pref Multiple:</span> <span className="text-blue-600 font-bold">{multiple}x</span></li>
+                                                                                            <li><span className="font-medium">Participation:</span> {isParticipating ? 'Yes (Double Dip)' : 'No (Standard)'}</li>
+                                                                                            <li><span className="font-medium">Cap:</span> No Cap</li>
+                                                                                        </ul>
+                                                                                    </div>
+                                                                                    <div>
+                                                                                        <span className="font-bold text-slate-500 uppercase block mb-1">Applied Math</span>
+                                                                                        <div className="font-mono bg-slate-50 p-2 rounded border border-slate-200 text-slate-600 space-y-1">
+                                                                                            <div>PAYOUT = INVESTMENT × MULTIPLE</div>
+                                                                                            {linkedRound && (
+                                                                                                <div className="text-blue-600 font-bold">
+                                                                                                    = {formatCurrency(linkedRound.investments.reduce((sum, inv) => sum + inv.amount, 0))} × {multiple}
+                                                                                                </div>
+                                                                                            )}
+                                                                                        </div>
+                                                                                    </div>
+                                                                                </div>
+                                                                            </>
+                                                                        );
+                                                                    })()}
+
+                                                                    {(step.stepName.includes('Participation') || step.stepName.includes('Common')) && (
+                                                                        <>
+                                                                            <div className="text-sm text-slate-600 bg-blue-50/50 p-3 rounded border border-blue-100 italic">
+                                                                                "Distribution of remaining proceeds ({formatCurrency(step.amount)}) to all eligible shareholders based on ownership %."
+                                                                            </div>
+                                                                            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-xs">
+                                                                                <div>
+                                                                                    <span className="font-bold text-slate-500 uppercase block mb-1">Key Parameters</span>
+                                                                                    <ul className="space-y-1 text-slate-700 list-disc pl-4">
+                                                                                        <li><span className="font-medium">Allocated Amount:</span> {formatCurrency(step.amount)}</li>
+                                                                                        <li><span className="font-medium">Basis:</span> Fully Diluted Ownership</li>
+                                                                                    </ul>
+                                                                                </div>
+                                                                                <div>
+                                                                                    <span className="font-bold text-slate-500 uppercase block mb-1">Concept</span>
+                                                                                    <div className="font-mono bg-slate-50 p-2 rounded border border-slate-200 text-slate-600">
+                                                                                        Shareholder Payout = Step Amount × (Individual Shares / Total FD Shares)
+                                                                                    </div>
+                                                                                </div>
+                                                                            </div>
+                                                                        </>
+                                                                    )}
+
+                                                                    {step.stepName.includes('Carve') && (
+                                                                        <>
+                                                                            <div className="text-sm text-slate-600 bg-amber-50/50 p-3 rounded border border-amber-100 italic">
+                                                                                "Management Carve-Out bonus deducted from the top."
+                                                                            </div>
+                                                                            <div className="text-xs">
+                                                                                <span className="font-bold text-slate-500 uppercase block mb-1">Calculation</span>
+                                                                                <div className="font-mono bg-slate-50 p-2 rounded border border-slate-200 text-slate-600">
+                                                                                    {formatCurrency(exitValuation)} (Exit Val) × {carveOutPercent}%
+                                                                                </div>
+                                                                            </div>
+                                                                        </>
+                                                                    )}
+                                                                </div>
+                                                            </div>
+
+                                                            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                                                                <div>
+                                                                    <h5 className="text-[10px] uppercase font-bold text-slate-400 mb-3 flex items-center gap-1">
+                                                                        <ChevronDown className="w-3 h-3" /> Detailed Recipients
+                                                                    </h5>
+                                                                    <div className="space-y-2 max-h-60 overflow-y-auto pr-2 custom-scrollbar">
+                                                                        {step.details?.shareholders.map((s, idx) => {
+                                                                            // Calculate effective percentage for this step
+                                                                            const percentOfStep = step.amount > 0 ? (s.amount / step.amount) * 100 : 0;
+                                                                            return (
+                                                                                <div key={idx} className="flex justify-between items-center text-sm p-2 rounded hover:bg-white transition-colors border-b border-transparent hover:border-slate-100">
+                                                                                    <div className="flex flex-col">
+                                                                                        <span className="font-medium text-slate-700">{s.name}</span>
+                                                                                        <span className="text-[10px] text-slate-400">
+                                                                                            {percentOfStep > 0 ? `${percentOfStep.toFixed(2)}% of this step` : ''}
+                                                                                        </span>
+                                                                                    </div>
+                                                                                    <span className="font-mono text-slate-600 bg-white px-2 py-0.5 rounded border border-slate-100 shadow-sm">{formatCurrency(s.amount)}</span>
+                                                                                </div>
+                                                                            );
+                                                                        })}
                                                                     </div>
-                                                                ))}
-                                                            </div>
-                                                        </div>
-                                                        <div>
-                                                            <h5 className="text-[10px] uppercase font-bold text-slate-400 mb-2">Step Stats</h5>
-                                                            <div className="space-y-1 text-xs">
-                                                                <div className="flex justify-between">
-                                                                    <span className="text-slate-500">Total Distributed</span>
-                                                                    <span className="font-medium">{formatCurrency(step.amount)}</span>
-                                                                </div>
-                                                                <div className="flex justify-between">
-                                                                    <span className="text-slate-500">Remaining</span>
-                                                                    <span className="font-medium text-slate-700">{formatCurrency(step.remainingBalance)}</span>
                                                                 </div>
                                                             </div>
                                                         </div>
                                                     </div>
                                                 </div>
-                                            )}
-                                        </div>
-                                    ))}
+
+                                                {/* Connecting Flow / Remaining */}
+                                                {!isLast && (
+                                                    <div className="ml-8 sm:ml-10 mt-3 flex items-center gap-3">
+                                                        <div className="flex items-center justify-center w-6 h-6 rounded-full bg-blue-50 text-blue-400 animate-bounce">
+                                                            <ArrowDown className="w-3 h-3" />
+                                                        </div>
+                                                        <span className="text-xs font-mono font-medium text-slate-400 bg-slate-50 px-2 py-1 rounded">
+                                                            Remaining: {formatCurrency(step.remainingBalance)}
+                                                        </span>
+                                                    </div>
+                                                )}
+                                            </div>
+                                        );
+                                    })}
                                 </div>
                             </div>
                         </div>

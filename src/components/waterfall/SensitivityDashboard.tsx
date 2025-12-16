@@ -108,7 +108,7 @@ export const SensitivityDashboard: React.FC<SensitivityDashboardProps> = ({
           <div>
             <div className="flex items-center gap-2">
               <h3 className="text-lg font-bold text-white">Base Exit Valuation</h3>
-              <Tooltip content="Valorisation de référence (100%). Les scénarios Bear/Bull sont des multiples de ce montant.">
+              <Tooltip content="Le prix de vente (Exit) que vous visez aujourd'hui. Tous les autres scénarios (pessimiste/optimiste) seront calculés par rapport à ce montant de référence.">
                 <div className="bg-white/20 p-1 rounded-full hover:bg-white/30 transition-colors">
                   <svg className="w-3 h-3 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
                 </div>
@@ -134,7 +134,7 @@ export const SensitivityDashboard: React.FC<SensitivityDashboardProps> = ({
           <div className="flex items-center gap-2 mb-3">
             <TrendingDown className="w-5 h-5 text-red-500" />
             <h4 className="font-bold text-slate-800">Bear Case</h4>
-            <Tooltip content="Scénario pessimiste (ex: 0.5x). Permet de vérifier si les préférences de liquidation protègent les investisseurs en cas de baisse." />
+            <Tooltip content="Si l'entreprise est vendue moins cher que prévu (ex: moitié prix). C'est ici qu'on voit si les investisseurs récupèrent tout leur argent avant vous (Liquid Pref) et s'il vous reste quelque chose." />
           </div>
           <div className="space-y-3">
             <div>
@@ -172,7 +172,7 @@ export const SensitivityDashboard: React.FC<SensitivityDashboardProps> = ({
           <div className="flex items-center gap-2 mb-3">
             <Target className="w-5 h-5 text-blue-500" />
             <h4 className="font-bold text-slate-800">Base Case</h4>
-            <Tooltip content="Scénario central (1.0x). Vérifiez l'impact de l'Earn-out sur la distribution à valuation constante." />
+            <Tooltip content="Votre scénario de vente cible. Ici, vous pouvez ajuster la part de prix 'conditionnelle' (Earn-out) pour voir ce qui est payé tout de suite (Cash) vs ce qui est payé plus tard." />
           </div>
           <div className="space-y-3">
             <div>
@@ -199,7 +199,7 @@ export const SensitivityDashboard: React.FC<SensitivityDashboardProps> = ({
           <div className="flex items-center gap-2 mb-3">
             <TrendingUp className="w-5 h-5 text-green-500" />
             <h4 className="font-bold text-slate-800">Bull Case</h4>
-            <Tooltip content="Scénario optimiste. Idéal pour voir le 'Catch-up' des fondateurs une fois le seuil de préférence dépassé." />
+            <Tooltip content="Si vous vendez plus cher que prévu (ex: x1.5). C'est là que la part des fondateurs augmente le plus vite une fois que les investisseurs ont récupéré leur mise initiale." />
           </div>
           <div className="space-y-3">
             <div>
@@ -237,7 +237,7 @@ export const SensitivityDashboard: React.FC<SensitivityDashboardProps> = ({
           <div className="flex items-center gap-2 mb-3">
             <Rocket className="w-5 h-5 text-purple-500" />
             <h4 className="font-bold text-slate-800">Stretch Case</h4>
-            <Tooltip content="Scénario 'Licorne'. Simule une sortie exceptionnelle pour visualiser le partage final de la valeur." />
+            <Tooltip content="Le scénario 'Jackpot'. Si vous vendez à un prix très élevé. Utile pour voir combien vous toucherez dans le meilleur des mondes." />
           </div>
           <div className="space-y-3">
             <div>
@@ -275,7 +275,7 @@ export const SensitivityDashboard: React.FC<SensitivityDashboardProps> = ({
       <div className="grid grid-cols-1 xl:grid-cols-2 gap-6">
         <div className="relative">
           <div className="absolute top-6 right-6 z-10">
-            <Tooltip content="Lecture: Comparez la hauteur pour le montant total. Chaque couleur est un groupe d'actionnaires." />
+            <Tooltip content="Chaque colonne représente un scénario de vente. La hauteur totale = le prix de vente. Les couleurs montrent qui reçoit quoi : en bas les investisseurs (prioritaires), au-dessus les fondateurs." />
           </div>
           <ComparativeWaterfall
             capTable={capTable}
@@ -286,7 +286,7 @@ export const SensitivityDashboard: React.FC<SensitivityDashboardProps> = ({
         </div>
         <div className="relative">
           <div className="absolute top-6 right-6 z-10">
-            <Tooltip content="Lecture: À gauche (Rouge) = Perte potentielle (Bear). À droite (Vert) = Gain potentiel (Bull/Stretch)." />
+            <Tooltip content="Ce graphique montre votre risque et votre potentiel. Rouge (gauche) : combien vous perdez si la vente se passe mal par rapport à votre cible. Vert (droite) : combien vous gagnez en plus si elle se passe très bien." />
           </div>
           <TornadoChart data={tornadoData} />
         </div>
