@@ -1,6 +1,6 @@
 import React, { useState, useMemo } from 'react';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip as RechartsTooltip, Legend, ResponsiveContainer } from 'recharts';
-import { TrendingUp, Layers, ChevronDown, Activity, ArrowDown, Droplets, Coins } from 'lucide-react';
+import { TrendingUp, Layers, ChevronDown, Activity, ArrowDown, Droplets, Coins, Sigma, HelpCircle } from 'lucide-react';
 import type { CapTable, LiquidationPreference, CarveOutBeneficiary, PayoutStructure } from '../../engine/types';
 import { calculateWaterfall } from '../../engine/WaterfallEngine';
 import { formatCurrency } from '../../utils';
@@ -44,17 +44,18 @@ export const WaterfallView: React.FC<WaterfallViewProps> = ({
 }) => {
     const [payoutStructure] = useState<PayoutStructure>('standard');
     const [expandedStepIndex, setExpandedStepIndex] = useState<number | null>(null);
+    const [isCarveOutActive, setIsCarveOutActive] = useState(carveOutPercent > 0);
 
     // M&A Enhancement States (Setters unused but state kept for config object)
 
-    const [nwcEnabled] = useState(false);
-    const [nwcTarget] = useState(0);
-    const [nwcActual] = useState(0);
-    const [rwReserveEnabled] = useState(false);
-    const [rwReservePercent] = useState(5);
-    const [escrowEnabled] = useState(false);
-    const [escrowPercent] = useState(10);
-    const [escrowDuration] = useState(12);
+    const [nwcEnabled, setNwcEnabled] = useState(false);
+    const [nwcTarget, setNwcTarget] = useState(0);
+    const [nwcActual, setNwcActual] = useState(0);
+    const [rwReserveEnabled, setRwReserveEnabled] = useState(false);
+    const [rwReservePercent, setRwReservePercent] = useState(5);
+    const [escrowEnabled, setEscrowEnabled] = useState(false);
+    const [escrowPercent, setEscrowPercent] = useState(10);
+    const [escrowDuration, setEscrowDuration] = useState(12);
 
     // Sensitivity Analysis State
     // Controlled by viewMode prop now mostly, but we keep params here
@@ -69,7 +70,7 @@ export const WaterfallView: React.FC<WaterfallViewProps> = ({
 
     // Build M&A config
     const maConfig = useMemo(() => ({
-        carveOutPercent,
+        carveOutPercent: isCarveOutActive ? carveOutPercent : 0,
         carveOutBeneficiary,
         payoutStructure,
         nwcAdjustment: nwcEnabled ? {
@@ -89,7 +90,7 @@ export const WaterfallView: React.FC<WaterfallViewProps> = ({
             duration: escrowDuration
         } : undefined,
         deductOptionStrike: true
-    }), [carveOutPercent, carveOutBeneficiary, payoutStructure, nwcEnabled, nwcTarget, nwcActual, rwReserveEnabled, rwReservePercent, escrowEnabled, escrowPercent, escrowDuration]);
+    }), [carveOutPercent, isCarveOutActive, carveOutBeneficiary, payoutStructure, nwcEnabled, nwcTarget, nwcActual, rwReserveEnabled, rwReservePercent, escrowEnabled, escrowPercent, escrowDuration]);
 
     const { steps, payouts, conversionAnalysis } = useMemo(() =>
         calculateWaterfall(capTable, effectiveExitValuation, preferences, maConfig),
@@ -220,15 +221,24 @@ export const WaterfallView: React.FC<WaterfallViewProps> = ({
                         capTable={capTable}
                     />
 
-                    {/* 4. Carve-Out (Moved to standalone since grid is removed in this block) */}
-                    <div className="bg-white p-5 rounded-xl border border-slate-200 shadow-sm relative overflow-hidden group hover:border-amber-300 transition-colors">
+                    {/* 4. Carve-Out (Redesigned with Toggle) */}
+                    <div className="bg-white p-5 rounded-xl border border-slate-200 shadow-sm relative group hover:border-amber-300 transition-colors z-0">
                         <div className="absolute top-0 right-0 p-3 opacity-5 group-hover:opacity-10 transition-opacity">
                             <span className="text-4xl">🎁</span>
                         </div>
-                        <h3 className="text-sm font-bold text-slate-800 mb-4 flex items-center gap-2">
-                            <span>🎁</span> Mgt Carve-Out
-                        </h3>
-                        <div className="space-y-4">
+                        <div className="flex items-center justify-between mb-4 border-b border-slate-100 pb-3">
+                            <h3 className="text-sm font-bold text-slate-800 flex items-center gap-2">
+                                <span>🎁</span> Mgt Carve-Out
+                            </h3>
+                            <button
+                                onClick={() => setIsCarveOutActive(!isCarveOutActive)}
+                                className={`w-9 h-5 rounded-full relative transition-colors duration-200 focus:outline-none ${isCarveOutActive ? 'bg-amber-500' : 'bg-slate-200'}`}
+                            >
+                                <div className={`w-3.5 h-3.5 bg-white rounded-full absolute top-[3px] transition-transform duration-200 shadow-sm ${isCarveOutActive ? 'left-[19px]' : 'left-[3px]'}`} />
+                            </button>
+                        </div>
+
+                        <div className={`space-y-4 transition-all duration-300 overflow-hidden ${isCarveOutActive ? 'opacity-100 max-h-96' : 'opacity-50 max-h-0'}`}>
                             <div>
                                 <div className="flex justify-between text-xs mb-1.5">
                                     <span className="text-slate-500 font-medium">Carve-out Size</span>
@@ -240,7 +250,10 @@ export const WaterfallView: React.FC<WaterfallViewProps> = ({
                                     max="25"
                                     step="0.5"
                                     value={carveOutPercent}
-                                    onChange={(e) => setCarveOutPercent(Number(e.target.value))}
+                                    onChange={(e) => {
+                                        setCarveOutPercent(Number(e.target.value));
+                                        if (!isCarveOutActive) setIsCarveOutActive(true);
+                                    }}
                                     className="w-full accent-amber-500 h-1.5 bg-slate-200 rounded-lg appearance-none cursor-pointer"
                                 />
                                 <div className="flex justify-between text-[10px] text-slate-400 mt-1">
@@ -264,6 +277,147 @@ export const WaterfallView: React.FC<WaterfallViewProps> = ({
                                         </button>
                                     ))}
                                 </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    {/* 5. M&A Clause Adjustments - Premium Redesign */}
+                    <div className="bg-white p-5 rounded-xl border border-slate-200 shadow-sm relative group hover:border-indigo-300 transition-colors z-0">
+                        <div className="absolute top-0 right-0 p-3 opacity-5 group-hover:opacity-10 transition-opacity">
+                            <Activity className="w-12 h-12" />
+                        </div>
+                        <h3 className="text-sm font-bold text-slate-800 mb-5 flex items-center gap-2 border-b border-slate-100 pb-3">
+                            <Activity className="w-4 h-4 text-indigo-500" />
+                            Pre-Closing Adjustments
+                        </h3>
+
+                        <div className="space-y-4 relative z-10">
+                            {/* NWC Adjustment */}
+                            <div className={`rounded-xl transition-all duration-300 ${nwcEnabled ? 'bg-indigo-50/50 ring-1 ring-indigo-100 shadow-sm p-3.5' : 'hover:bg-slate-50 p-2'}`}>
+                                <div className="flex items-center justify-between">
+                                    <div className="flex items-center gap-2">
+                                        <label className="text-xs font-bold text-slate-700 cursor-pointer" onClick={() => setNwcEnabled(!nwcEnabled)}>Working Capital Adj.</label>
+                                        <div className="relative flex items-center cursor-help">
+                                            <HelpCircle className="peer w-3.5 h-3.5 text-slate-400 hover:text-indigo-500 transition-colors" />
+                                            <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 px-3 py-2 bg-slate-800 text-white text-[10px] leading-tight rounded-lg opacity-0 invisible peer-hover:opacity-100 peer-hover:visible transition-all duration-200 w-48 text-center shadow-xl pointer-events-none z-50">
+                                                Ajustement du prix vs BFR Normatif. Si BFR Réel &gt; Cible = Bonus Vendeur (et inversement).
+                                                <div className="absolute top-full left-1/2 -translate-x-1/2 border-4 border-transparent border-t-slate-800"></div>
+                                            </div>
+                                        </div>
+                                    </div>
+                                    <button
+                                        onClick={() => setNwcEnabled(!nwcEnabled)}
+                                        className={`w-9 h-5 rounded-full relative transition-colors duration-200 focus:outline-none ${nwcEnabled ? 'bg-indigo-500' : 'bg-slate-200'}`}
+                                    >
+                                        <div className={`w-3.5 h-3.5 bg-white rounded-full absolute top-[3px] transition-transform duration-200 shadow-sm ${nwcEnabled ? 'left-[19px]' : 'left-[3px]'}`} />
+                                    </button>
+                                </div>
+                                {nwcEnabled && (
+                                    <div className="grid grid-cols-2 gap-3 mt-3 animate-in fade-in slide-in-from-top-2 duration-300">
+                                        <div>
+                                            <span className="text-[9px] uppercase tracking-wider font-semibold text-slate-400 mb-1 block">Normative Target</span>
+                                            <FormattedNumberInput
+                                                value={nwcTarget}
+                                                onChange={setNwcTarget}
+                                                className="w-full text-xs py-1.5 px-2 rounded-lg border border-slate-200 focus:border-indigo-400 focus:ring-2 focus:ring-indigo-100 outline-none transition-all bg-white"
+                                            />
+                                        </div>
+                                        <div>
+                                            <span className="text-[9px] uppercase tracking-wider font-semibold text-slate-400 mb-1 block">Actual at Closing</span>
+                                            <FormattedNumberInput
+                                                value={nwcActual}
+                                                onChange={setNwcActual}
+                                                className="w-full text-xs py-1.5 px-2 rounded-lg border border-slate-200 focus:border-indigo-400 focus:ring-2 focus:ring-indigo-100 outline-none transition-all bg-white"
+                                            />
+                                        </div>
+                                    </div>
+                                )}
+                            </div>
+
+                            {/* Escrow */}
+                            <div className={`rounded-xl transition-all duration-300 ${escrowEnabled ? 'bg-indigo-50/50 ring-1 ring-indigo-100 shadow-sm p-3.5' : 'hover:bg-slate-50 p-2'}`}>
+                                <div className="flex items-center justify-between">
+                                    <div className="flex items-center gap-2">
+                                        <label className="text-xs font-bold text-slate-700 cursor-pointer" onClick={() => setEscrowEnabled(!escrowEnabled)}>Indemnity Escrow</label>
+                                        <div className="relative flex items-center cursor-help">
+                                            <HelpCircle className="peer w-3.5 h-3.5 text-slate-400 hover:text-indigo-500 transition-colors" />
+                                            <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 px-3 py-2 bg-slate-800 text-white text-[10px] leading-tight rounded-lg opacity-0 invisible peer-hover:opacity-100 peer-hover:visible transition-all duration-200 w-48 text-center shadow-xl pointer-events-none z-50">
+                                                Somme séquestrée pour garantir les obligations d'indemnisation du vendeur post-closing.
+                                                <div className="absolute top-full left-1/2 -translate-x-1/2 border-4 border-transparent border-t-slate-800"></div>
+                                            </div>
+                                        </div>
+                                    </div>
+                                    <button
+                                        onClick={() => setEscrowEnabled(!escrowEnabled)}
+                                        className={`w-9 h-5 rounded-full relative transition-colors duration-200 focus:outline-none ${escrowEnabled ? 'bg-indigo-500' : 'bg-slate-200'}`}
+                                    >
+                                        <div className={`w-3.5 h-3.5 bg-white rounded-full absolute top-[3px] transition-transform duration-200 shadow-sm ${escrowEnabled ? 'left-[19px]' : 'left-[3px]'}`} />
+                                    </button>
+                                </div>
+                                {escrowEnabled && (
+                                    <div className="grid grid-cols-2 gap-3 mt-3 animate-in fade-in slide-in-from-top-2 duration-300">
+                                        <div>
+                                            <span className="text-[9px] uppercase tracking-wider font-semibold text-slate-400 mb-1 block">Amount (%)</span>
+                                            <div className="relative">
+                                                <input
+                                                    type="number"
+                                                    value={escrowPercent}
+                                                    onChange={(e) => setEscrowPercent(Number(e.target.value))}
+                                                    className="w-full text-xs py-1.5 px-2 pr-5 rounded-lg border border-slate-200 focus:border-indigo-400 focus:ring-2 focus:ring-indigo-100 outline-none transition-all bg-white"
+                                                />
+                                                <span className="absolute right-2 top-1.5 text-[10px] text-slate-400 font-bold">%</span>
+                                            </div>
+                                        </div>
+                                        <div>
+                                            <span className="text-[9px] uppercase tracking-wider font-semibold text-slate-400 mb-1 block">Duration (Months)</span>
+                                            <input
+                                                type="number"
+                                                value={escrowDuration}
+                                                onChange={(e) => setEscrowDuration(Number(e.target.value))}
+                                                className="w-full text-xs py-1.5 px-2 rounded-lg border border-slate-200 focus:border-indigo-400 focus:ring-2 focus:ring-indigo-100 outline-none transition-all bg-white"
+                                            />
+                                        </div>
+                                    </div>
+                                )}
+                            </div>
+
+                            {/* R&W Reserve */}
+                            <div className={`rounded-xl transition-all duration-300 ${rwReserveEnabled ? 'bg-indigo-50/50 ring-1 ring-indigo-100 shadow-sm p-3.5' : 'hover:bg-slate-50 p-2'}`}>
+                                <div className="flex items-center justify-between">
+                                    <div className="flex items-center gap-2">
+                                        <label className="text-xs font-bold text-slate-700 cursor-pointer" onClick={() => setRwReserveEnabled(!rwReserveEnabled)}>R&W Reserve</label>
+                                        <div className="relative flex items-center cursor-help">
+                                            <HelpCircle className="peer w-3.5 h-3.5 text-slate-400 hover:text-indigo-500 transition-colors" />
+                                            <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 px-3 py-2 bg-slate-800 text-white text-[10px] leading-tight rounded-lg opacity-0 invisible peer-hover:opacity-100 peer-hover:visible transition-all duration-200 w-48 text-center shadow-xl pointer-events-none z-50">
+                                                Réserve spécifique pour couvrir les brèches potentielles de Garanties de Passif (Representations & Warranties).
+                                                <div className="absolute top-full left-1/2 -translate-x-1/2 border-4 border-transparent border-t-slate-800"></div>
+                                            </div>
+                                        </div>
+                                    </div>
+                                    <button
+                                        onClick={() => setRwReserveEnabled(!rwReserveEnabled)}
+                                        className={`w-9 h-5 rounded-full relative transition-colors duration-200 focus:outline-none ${rwReserveEnabled ? 'bg-indigo-500' : 'bg-slate-200'}`}
+                                    >
+                                        <div className={`w-3.5 h-3.5 bg-white rounded-full absolute top-[3px] transition-transform duration-200 shadow-sm ${rwReserveEnabled ? 'left-[19px]' : 'left-[3px]'}`} />
+                                    </button>
+                                </div>
+                                {rwReserveEnabled && (
+                                    <div className="mt-3 animate-in fade-in slide-in-from-top-2 duration-300">
+                                        <div className="flex justify-between items-center mb-1">
+                                            <span className="text-[9px] uppercase tracking-wider font-semibold text-slate-400">Reserved Amount</span>
+                                            <span className="text-xs font-bold text-indigo-600 bg-indigo-50 px-2 py-0.5 rounded">{rwReservePercent}%</span>
+                                        </div>
+                                        <input
+                                            type="range"
+                                            min="0"
+                                            max="20"
+                                            step="0.5"
+                                            value={rwReservePercent}
+                                            onChange={(e) => setRwReservePercent(Number(e.target.value))}
+                                            className="w-full accent-indigo-500 h-1.5 bg-slate-200 rounded-lg appearance-none cursor-pointer"
+                                        />
+                                    </div>
+                                )}
                             </div>
                         </div>
                     </div>
@@ -361,29 +515,22 @@ export const WaterfallView: React.FC<WaterfallViewProps> = ({
                                     <ResponsiveContainer width="100%" height="100%">
                                         <BarChart data={chartData} margin={{ top: 20, right: 30, left: 20, bottom: 50 }}>
                                             <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
-                                            <XAxis
-                                                dataKey="name"
-                                                angle={-45}
-                                                textAnchor="end"
-                                                height={80}
-                                                tick={{ fontSize: 11, fill: '#64748b' }}
-                                                axisLine={{ stroke: '#e2e8f0' }}
-                                            />
-                                            <YAxis
-                                                tickFormatter={(val) => `€${(val / 1000000).toFixed(1)}m`}
-                                                tick={{ fontSize: 11, fill: '#64748b' }}
-                                                axisLine={false}
-                                                tickLine={false}
-                                            />
+                                            <XAxis dataKey="name" tick={{ fontSize: 11, fill: '#64748b' }} axisLine={false} tickLine={false} />
+                                            <YAxis tickFormatter={(val) => `€${(val / 1000000).toFixed(1)}m`} tick={{ fontSize: 11, fill: '#64748b' }} axisLine={false} tickLine={false} />
                                             <RechartsTooltip
                                                 cursor={{ fill: '#f8fafc' }}
                                                 contentStyle={{ borderRadius: '12px', border: 'none', boxShadow: '0 10px 15px -3px rgba(0, 0, 0, 0.1)' }}
-                                                formatter={(value: number) => [formatCurrency(value), '']}
+                                                formatter={(val: number) => formatCurrency(val)}
                                             />
-                                            <Legend verticalAlign="top" height={36} iconType="circle" />
-                                            <Bar dataKey="Preference" stackId="a" fill={WATERFALL_COLORS.preference} radius={[0, 0, 0, 0]} />
-                                            <Bar dataKey="Participation" stackId="a" fill={WATERFALL_COLORS.participation} radius={[0, 0, 0, 0]} />
-                                            <Bar dataKey="CarveOut" stackId="a" fill={WATERFALL_COLORS.carveOut} radius={[4, 4, 0, 0]} />
+                                            <Legend iconType="circle" wrapperStyle={{ fontSize: '12px', paddingTop: '10px' }} />
+                                            {/* Only render bars if data exists globally */}
+                                            {chartData.some(d => d.CarveOut > 0) && (
+                                                <Bar dataKey="CarveOut" stackId="a" fill="#f59e0b" radius={[0, 0, 4, 4]} />
+                                            )}
+                                            {chartData.some(d => d.Preference > 0) && (
+                                                <Bar dataKey="Preference" stackId="a" fill="#3b82f6" />
+                                            )}
+                                            <Bar dataKey="Participation" stackId="a" fill="#10b981" radius={[4, 4, 0, 0]} />
                                         </BarChart>
                                     </ResponsiveContainer>
                                 </div>
@@ -515,32 +662,41 @@ export const WaterfallView: React.FC<WaterfallViewProps> = ({
                                         const percentOfTotal = (step.amount / effectiveExitValuation) * 100;
 
                                         return (
-                                            <div key={step.stepNumber} className="relative pb-8 group">
+                                            <div key={step.stepNumber + (step.isTotal ? '-total' : '')} className="relative pb-3 group">
                                                 {/* Timeline Node */}
-                                                <div className="absolute -left-[21px] sm:-left-[21px] top-6 w-11 h-11 rounded-full bg-white border-4 border-blue-50 shadow-md z-10 flex items-center justify-center">
-                                                    <span className="text-sm font-bold text-blue-600">{step.stepNumber}</span>
+                                                <div className={`absolute -left-[21px] sm:-left-[21px] top-5 w-11 h-11 rounded-full border-4 shadow-md z-10 flex items-center justify-center scale-75 ${step.isTotal ? 'bg-indigo-50 border-indigo-200' : 'bg-white border-blue-50'}`}>
+                                                    {step.isTotal ? <Sigma className="w-5 h-5 text-indigo-600" /> : <span className="text-sm font-bold text-blue-600">{step.stepNumber}</span>}
                                                 </div>
 
                                                 {/* Step Card */}
-                                                <div className="ml-8 sm:ml-10 bg-white rounded-2xl border border-slate-200 shadow-sm hover:shadow-md transition-all duration-300 overflow-hidden">
+                                                <div className={`ml-8 sm:ml-10 rounded-2xl border shadow-sm hover:shadow-md transition-all duration-300 overflow-hidden ${step.isTotal ? 'bg-indigo-50/50 border-indigo-200' : 'bg-white border-slate-200'}`}>
                                                     {/* Header */}
                                                     <button
                                                         onClick={() => setExpandedStepIndex(expandedStepIndex === index ? null : index)}
                                                         className="w-full text-left"
                                                     >
-                                                        <div className="p-5 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-                                                            <div className="flex items-center gap-4">
-                                                                <div className={`p-3 rounded-xl ${step.amount > 0 ? 'bg-blue-50 text-blue-600' : 'bg-slate-50 text-slate-400'}`}>
-                                                                    {step.stepName.includes('Preference') ? <Coins className="w-6 h-6" /> : <Droplets className="w-6 h-6" />}
+                                                        <div className="p-3 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                                                            <div className="flex items-center gap-3">
+                                                                <div className={`p-2.5 rounded-xl ${step.isTotal ? 'bg-indigo-100 text-indigo-700' : (step.amount > 0 ? 'bg-blue-50 text-blue-600' : 'bg-slate-50 text-slate-400')}`}>
+                                                                    {step.isTotal ? <Sigma className="w-5 h-5" /> : (step.stepName.includes('Preference') ? <Coins className="w-5 h-5" /> : <Droplets className="w-5 h-5" />)}
                                                                 </div>
                                                                 <div>
-                                                                    <h4 className="font-bold text-slate-800 text-lg">{step.stepName}</h4>
-                                                                    <p className="text-sm text-slate-500">{step.description}</p>
+                                                                    <div className="flex items-center gap-2">
+                                                                        <h4 className={`font-bold text-base ${step.isTotal ? 'text-indigo-900' : 'text-slate-800'}`}>
+                                                                            {step.isTotal ? <span className="mr-2 uppercase tracking-wider text-xs bg-indigo-200 text-indigo-800 px-2 py-0.5 rounded">Total</span> : null}
+                                                                            {step.stepName.replace(/^\d+\/\s*/, '')}
+                                                                        </h4>
+                                                                        <ChevronDown className={`w-4 h-4 text-slate-400 transition-transform duration-300 ${expandedStepIndex === index ? 'rotate-180' : ''}`} />
+                                                                    </div>
+                                                                    {/* Description only visible when expanded */}
+                                                                    <div className={`grid transition-all duration-300 ${expandedStepIndex === index ? 'grid-rows-[1fr] opacity-100 mt-1' : 'grid-rows-[0fr] opacity-0'}`}>
+                                                                        <p className="text-sm text-slate-500 overflow-hidden">{step.description}</p>
+                                                                    </div>
                                                                 </div>
                                                             </div>
                                                             <div className="text-right min-w-[120px]">
-                                                                <div className="text-2xl font-bold text-slate-900 tracking-tight">{formatCurrency(step.amount)}</div>
-                                                                <div className="text-xs font-medium text-slate-400 uppercase tracking-wide">Distributed</div>
+                                                                <div className={`text-xl font-bold tracking-tight ${step.isTotal ? 'text-indigo-700' : 'text-slate-900'}`}>{formatCurrency(step.amount)}</div>
+                                                                <div className="text-[10px] font-medium text-slate-400 uppercase tracking-wide">{step.isTotal ? 'Cumul Rank' : 'Distributed'}</div>
                                                             </div>
                                                         </div>
 
@@ -557,115 +713,115 @@ export const WaterfallView: React.FC<WaterfallViewProps> = ({
                                                     {/* Expanded Details */}
                                                     <div className={`transition-all duration-300 ease-in-out border-t border-slate-50 bg-slate-50/50 ${expandedStepIndex === index ? 'max-h-[800px] opacity-100' : 'max-h-0 opacity-0 overflow-hidden'}`}>
                                                         <div className="p-5">
-                                                            {/* Enhanced Logic & Calculation */}
-                                                            <div className="bg-white border border-blue-100 rounded-lg p-4 mb-4 shadow-sm">
-                                                                <div className="flex items-center gap-2 font-bold text-blue-700 mb-3 pb-2 border-b border-blue-50">
-                                                                    <Activity className="w-4 h-4" />
-                                                                    Calculation Details
-                                                                </div>
+                                                            {/* Enhanced Logic & Calculation - Only for non-Total steps */}
+                                                            {!step.isTotal && (
+                                                                <div className="bg-white border border-blue-100 rounded-lg p-4 mb-4 shadow-sm">
+                                                                    <div className="flex items-center gap-2 font-bold text-blue-700 mb-3 pb-2 border-b border-blue-50">
+                                                                        <Activity className="w-4 h-4" />
+                                                                        Calculation Details
+                                                                    </div>
+                                                                    <div className="space-y-4">
+                                                                        {step.stepName.includes('Liquidation Preference') && (() => {
+                                                                            const linkedRound = capTable.rounds.find(r => step.stepName.toLowerCase().includes(r.name.toLowerCase()));
+                                                                            const multiple = linkedRound?.liquidationPreferenceMultiple || 1;
+                                                                            const isParticipating = linkedRound?.isParticipating || false;
+                                                                            return (
+                                                                                <>
+                                                                                    <div className="text-sm text-slate-600 bg-blue-50/50 p-3 rounded border border-blue-100 italic flex justify-between items-start">
+                                                                                        <span>"Priority payout for <strong>{linkedRound ? linkedRound.name : 'Investors'}</strong> based on their investment terms."</span>
+                                                                                    </div>
+                                                                                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-xs">
+                                                                                        <div>
+                                                                                            <span className="font-bold text-slate-500 uppercase block mb-1">Round Settings ({linkedRound?.name || 'Unknown'})</span>
+                                                                                            <ul className="space-y-1 text-slate-700 list-disc pl-4">
+                                                                                                <li><span className="font-medium">Total Invested:</span> {linkedRound?.investments ? formatCurrency(linkedRound.investments.reduce((sum, inv) => sum + inv.amount, 0)) : '-'}</li>
+                                                                                                <li><span className="font-medium">Pref Multiple:</span> <span className="text-blue-600 font-bold">{multiple}x</span></li>
+                                                                                                <li><span className="font-medium">Participation:</span> {isParticipating ? 'Yes (Double Dip)' : 'No (Standard)'}</li>
+                                                                                                <li><span className="font-medium">Cap:</span> No Cap</li>
+                                                                                            </ul>
+                                                                                        </div>
+                                                                                        <div>
+                                                                                            <span className="font-bold text-slate-500 uppercase block mb-1">Applied Math</span>
+                                                                                            <div className="font-mono bg-slate-50 p-2 rounded border border-slate-200 text-slate-600 space-y-1">
+                                                                                                <div>PAYOUT = INVESTMENT × MULTIPLE</div>
+                                                                                                {linkedRound && (
+                                                                                                    <div className="text-blue-600 font-bold">
+                                                                                                        = {formatCurrency(linkedRound.investments.reduce((sum, inv) => sum + inv.amount, 0))} × {multiple}
+                                                                                                    </div>
+                                                                                                )}
+                                                                                            </div>
+                                                                                        </div>
+                                                                                    </div>
+                                                                                </>
+                                                                            );
+                                                                        })()}
 
-                                                                {/* Dynamic Explanation based on Step Type */}
-                                                                <div className="space-y-4">
-                                                                    {step.stepName.includes('Liquidation Preference') && (() => {
-                                                                        // Try to find the matching round to display real settings
-                                                                        const linkedRound = capTable.rounds.find(r => step.stepName.toLowerCase().includes(r.name.toLowerCase()));
-                                                                        const multiple = linkedRound?.liquidationPreferenceMultiple || 1;
-                                                                        const isParticipating = linkedRound?.isParticipating || false;
-
-                                                                        return (
+                                                                        {(step.stepName.includes('Participation') || step.stepName.includes('Common') || step.stepName.includes('Catch-up') || step.stepName.includes('Double Dip')) && (
                                                                             <>
-                                                                                <div className="text-sm text-slate-600 bg-blue-50/50 p-3 rounded border border-blue-100 italic flex justify-between items-start">
-                                                                                    <span>"Priority payout for <strong>{linkedRound ? linkedRound.name : 'Investors'}</strong> based on their investment terms."</span>
+                                                                                <div className="text-sm text-slate-600 bg-blue-50/50 p-3 rounded border border-blue-100 italic">
+                                                                                    "Distribution of remaining proceeds ({formatCurrency(step.amount)}) to all eligible shareholders based on ownership %."
                                                                                 </div>
                                                                                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-xs">
                                                                                     <div>
-                                                                                        <span className="font-bold text-slate-500 uppercase block mb-1">Round Settings ({linkedRound?.name || 'Unknown'})</span>
+                                                                                        <span className="font-bold text-slate-500 uppercase block mb-1">Key Parameters</span>
                                                                                         <ul className="space-y-1 text-slate-700 list-disc pl-4">
-                                                                                            <li><span className="font-medium">Total Invested:</span> {linkedRound?.investments ? formatCurrency(linkedRound.investments.reduce((sum, inv) => sum + inv.amount, 0)) : '-'}</li>
-                                                                                            <li><span className="font-medium">Pref Multiple:</span> <span className="text-blue-600 font-bold">{multiple}x</span></li>
-                                                                                            <li><span className="font-medium">Participation:</span> {isParticipating ? 'Yes (Double Dip)' : 'No (Standard)'}</li>
-                                                                                            <li><span className="font-medium">Cap:</span> No Cap</li>
+                                                                                            <li><span className="font-medium">Allocated Amount:</span> {formatCurrency(step.amount)}</li>
+                                                                                            <li><span className="font-medium">Basis:</span> Fully Diluted Ownership</li>
                                                                                         </ul>
                                                                                     </div>
                                                                                     <div>
-                                                                                        <span className="font-bold text-slate-500 uppercase block mb-1">Applied Math</span>
-                                                                                        <div className="font-mono bg-slate-50 p-2 rounded border border-slate-200 text-slate-600 space-y-1">
-                                                                                            <div>PAYOUT = INVESTMENT × MULTIPLE</div>
-                                                                                            {linkedRound && (
-                                                                                                <div className="text-blue-600 font-bold">
-                                                                                                    = {formatCurrency(linkedRound.investments.reduce((sum, inv) => sum + inv.amount, 0))} × {multiple}
-                                                                                                </div>
-                                                                                            )}
+                                                                                        <span className="font-bold text-slate-500 uppercase block mb-1">Concept</span>
+                                                                                        <div className="font-mono bg-slate-50 p-2 rounded border border-slate-200 text-slate-600">
+                                                                                            Shareholder Payout = Step Amount × (Individual Shares / Total FD Shares)
                                                                                         </div>
                                                                                     </div>
                                                                                 </div>
                                                                             </>
-                                                                        );
-                                                                    })()}
+                                                                        )}
 
-                                                                    {(step.stepName.includes('Participation') || step.stepName.includes('Common')) && (
-                                                                        <>
-                                                                            <div className="text-sm text-slate-600 bg-blue-50/50 p-3 rounded border border-blue-100 italic">
-                                                                                "Distribution of remaining proceeds ({formatCurrency(step.amount)}) to all eligible shareholders based on ownership %."
-                                                                            </div>
-                                                                            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-xs">
-                                                                                <div>
-                                                                                    <span className="font-bold text-slate-500 uppercase block mb-1">Key Parameters</span>
-                                                                                    <ul className="space-y-1 text-slate-700 list-disc pl-4">
-                                                                                        <li><span className="font-medium">Allocated Amount:</span> {formatCurrency(step.amount)}</li>
-                                                                                        <li><span className="font-medium">Basis:</span> Fully Diluted Ownership</li>
-                                                                                    </ul>
+                                                                        {step.stepName.includes('Carve') && (
+                                                                            <>
+                                                                                <div className="text-sm text-slate-600 bg-amber-50/50 p-3 rounded border border-amber-100 italic">
+                                                                                    "Management Carve-Out bonus deducted from the top."
                                                                                 </div>
-                                                                                <div>
-                                                                                    <span className="font-bold text-slate-500 uppercase block mb-1">Concept</span>
+                                                                                <div className="text-xs">
+                                                                                    <span className="font-bold text-slate-500 uppercase block mb-1">Calculation</span>
                                                                                     <div className="font-mono bg-slate-50 p-2 rounded border border-slate-200 text-slate-600">
-                                                                                        Shareholder Payout = Step Amount × (Individual Shares / Total FD Shares)
+                                                                                        {formatCurrency(effectiveExitValuation)} (Exit Val) × {carveOutPercent}%
                                                                                     </div>
                                                                                 </div>
-                                                                            </div>
-                                                                        </>
-                                                                    )}
-
-                                                                    {step.stepName.includes('Carve') && (
-                                                                        <>
-                                                                            <div className="text-sm text-slate-600 bg-amber-50/50 p-3 rounded border border-amber-100 italic">
-                                                                                "Management Carve-Out bonus deducted from the top."
-                                                                            </div>
-                                                                            <div className="text-xs">
-                                                                                <span className="font-bold text-slate-500 uppercase block mb-1">Calculation</span>
-                                                                                <div className="font-mono bg-slate-50 p-2 rounded border border-slate-200 text-slate-600">
-                                                                                    {formatCurrency(exitValuation)} (Exit Val) × {carveOutPercent}%
-                                                                                </div>
-                                                                            </div>
-                                                                        </>
-                                                                    )}
-                                                                </div>
-                                                            </div>
-
-                                                            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                                                                <div>
-                                                                    <h5 className="text-[10px] uppercase font-bold text-slate-400 mb-3 flex items-center gap-1">
-                                                                        <ChevronDown className="w-3 h-3" /> Detailed Recipients
-                                                                    </h5>
-                                                                    <div className="space-y-2 max-h-60 overflow-y-auto pr-2 custom-scrollbar">
-                                                                        {step.details?.shareholders.map((s, idx) => {
-                                                                            // Calculate effective percentage for this step
-                                                                            const percentOfStep = step.amount > 0 ? (s.amount / step.amount) * 100 : 0;
-                                                                            return (
-                                                                                <div key={idx} className="flex justify-between items-center text-sm p-2 rounded hover:bg-white transition-colors border-b border-transparent hover:border-slate-100">
-                                                                                    <div className="flex flex-col">
-                                                                                        <span className="font-medium text-slate-700">{s.name}</span>
-                                                                                        <span className="text-[10px] text-slate-400">
-                                                                                            {percentOfStep > 0 ? `${percentOfStep.toFixed(2)}% of this step` : ''}
-                                                                                        </span>
-                                                                                    </div>
-                                                                                    <span className="font-mono text-slate-600 bg-white px-2 py-0.5 rounded border border-slate-100 shadow-sm">{formatCurrency(s.amount)}</span>
-                                                                                </div>
-                                                                            );
-                                                                        })}
+                                                                            </>
+                                                                        )}
                                                                     </div>
                                                                 </div>
-                                                            </div>
+                                                            )}
+
+                                                            {/* Detailed Recipients - Only if data exists */}
+                                                            {step.details?.shareholders && step.details.shareholders.length > 0 && (
+                                                                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                                                                    <div>
+                                                                        <h5 className="text-[10px] uppercase font-bold text-slate-400 mb-3 flex items-center gap-1">
+                                                                            <ChevronDown className="w-3 h-3" /> Detailed Recipients
+                                                                        </h5>
+                                                                        <div className="space-y-2 max-h-60 overflow-y-auto pr-2 custom-scrollbar">
+                                                                            {step.details.shareholders.map((s, idx) => {
+                                                                                const percentOfStep = step.amount > 0 ? (s.amount / step.amount) * 100 : 0;
+                                                                                return (
+                                                                                    <div key={idx} className="flex justify-between items-center text-sm p-2 rounded hover:bg-white transition-colors border-b border-transparent hover:border-slate-100">
+                                                                                        <div className="flex flex-col">
+                                                                                            <span className="font-medium text-slate-700">{s.name}</span>
+                                                                                            <span className="text-[10px] text-slate-400">
+                                                                                                {percentOfStep > 0 ? `${percentOfStep.toFixed(2)}% of this step` : ''}
+                                                                                            </span>
+                                                                                        </div>
+                                                                                        <span className="font-mono text-slate-600 bg-white px-2 py-0.5 rounded border border-slate-100 shadow-sm">{formatCurrency(s.amount)}</span>
+                                                                                    </div>
+                                                                                );
+                                                                            })}
+                                                                        </div>
+                                                                    </div>
+                                                                </div>
+                                                            )}
                                                         </div>
                                                     </div>
                                                 </div>

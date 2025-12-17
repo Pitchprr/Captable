@@ -247,60 +247,37 @@ export const calculateWaterfall = (
         }
 
         // Add steps
-        const shareClasses = new Map<string, number>();
-        eligibleShareholders.forEach(s => {
-            Object.entries(s.sharesByClass).forEach(([className, shares]) => {
-                shareClasses.set(className, (shareClasses.get(className) || 0) + shares);
-            });
-            if (s.totalOptions > 0) {
-                shareClasses.set('Ordinary', (shareClasses.get('Ordinary') || 0) + s.totalOptions);
-            }
-        });
+        // Create one consolidated step for Carve-Out
+        const carveOutDetails: { id: string, name: string, amount: number }[] = [];
 
-        Array.from(shareClasses.keys()).sort().reverse().forEach(className => {
-            const shares = shareClasses.get(className) || 0;
-            const classAmount = totalEligibleShares > 0 ? (shares / totalEligibleShares) * carveOutAmount : 0;
-
-            const classShareholders: { id: string, name: string, amount: number }[] = [];
+        if (totalEligibleShares > 0) {
             eligibleShareholders.forEach(s => {
-                const sShares = (s.sharesByClass[className] || 0) + (className === 'Ordinary' ? s.totalOptions : 0);
-                if (sShares > 0) {
-                    const sAmount = (sShares / totalEligibleShares) * carveOutAmount;
-                    if (sAmount > 0) {
-                        classShareholders.push({
-                            id: s.shareholderId,
-                            name: s.shareholderName,
-                            amount: sAmount
-                        });
-                    }
+                const amount = ((s.totalShares + s.totalOptions) / totalEligibleShares) * carveOutAmount;
+                if (amount > 0) {
+                    carveOutDetails.push({
+                        id: s.shareholderId,
+                        name: s.shareholderName,
+                        amount
+                    });
                 }
             });
-
-            steps.push({
-                stepNumber,
-                stepName: `${stepNumber}/ Carve-Out`,
-                description: className,
-                shareClass: className,
-                amount: classAmount,
-                remainingBalance: remainingProceeds,
-                details: {
-                    shareholders: classShareholders,
-                    calculation: {
-                        type: 'CarveOut',
-                        shareClass: className,
-                        totalShares: shares
-                    }
-                }
-            });
-        });
+        }
 
         steps.push({
             stepNumber,
             stepName: `${stepNumber}/ Carve-Out`,
-            description: 'Total carve-out',
+            description: `${config.carveOutPercent}% Allocation`,
             amount: carveOutAmount,
             remainingBalance: remainingProceeds,
-            isTotal: true
+            details: {
+                shareholders: carveOutDetails.sort((a, b) => b.amount - a.amount),
+                calculation: {
+                    type: 'CarveOut',
+                    shareClass: 'All Eligible',
+                    totalShares: totalEligibleShares,
+                    formula: `${config.carveOutPercent}% of Exit Valuation distributed pro-rata to eligible shareholders`
+                }
+            }
         });
     }
 
