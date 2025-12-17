@@ -1,9 +1,8 @@
 import * as XLSX from 'xlsx';
 import Papa from 'papaparse';
-import Fuse from 'fuse.js';
 import { z } from 'zod';
 import type { CapTable, Shareholder, Round, ShareholderRole, Investment } from '../engine/types';
-import type { ColumnMapping, ImportedRow, DetectedRound } from '../components/import/types';
+import type { ImportedRow, DetectedRound } from '../components/import/types';
 
 // ============================================================
 // ZOD SCHEMAS FOR VALIDATION
@@ -514,7 +513,6 @@ export interface ValidationResult {
 }
 
 export const validateImportedData = (
-    headers: string[],
     data: ImportedRow[],
     matches: SmartMatchResult[]
 ): ValidationResult => {
@@ -589,7 +587,6 @@ const parseNumber = (value: any): number => {
 // ============================================================
 
 export const processImportedData = (
-    headers: string[],
     data: ImportedRow[],
     matches: SmartMatchResult[],
     detectedRounds: DetectedRound[]

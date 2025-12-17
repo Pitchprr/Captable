@@ -1,10 +1,10 @@
 import React, { useState, useMemo } from 'react';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip as RechartsTooltip, Legend, ResponsiveContainer } from 'recharts';
-import { TrendingUp, TrendingDown, Target, Rocket, HelpCircle, Layers, ChevronDown, Activity, ArrowDown, Droplets, Coins, AlertCircle, Settings2 } from 'lucide-react';
-import type { CapTable, LiquidationPreference, CarveOutBeneficiary, PayoutStructure, WaterfallStep } from '../../engine/types';
+import { TrendingUp, Layers, ChevronDown, Activity, ArrowDown, Droplets, Coins } from 'lucide-react';
+import type { CapTable, LiquidationPreference, CarveOutBeneficiary, PayoutStructure } from '../../engine/types';
 import { calculateWaterfall } from '../../engine/WaterfallEngine';
 import { formatCurrency } from '../../utils';
-import { Input } from '../ui/Input';
+// unused imports removed
 import { FormattedNumberInput } from '../ui/FormattedNumberInput';
 import { PreferenceConfig } from './PreferenceConfig';
 import { WATERFALL_COLORS } from '../../theme';
@@ -42,19 +42,19 @@ export const WaterfallView: React.FC<WaterfallViewProps> = ({
     earnoutMax = 0,
     viewMode = 'waterfall'
 }) => {
-    const [payoutStructure, setPayoutStructure] = useState<PayoutStructure>('standard');
+    const [payoutStructure] = useState<PayoutStructure>('standard');
     const [expandedStepIndex, setExpandedStepIndex] = useState<number | null>(null);
 
-    // M&A Enhancement States
-    const [showMaConfig, setShowMaConfig] = useState(false);
-    const [nwcEnabled, setNwcEnabled] = useState(false);
-    const [nwcTarget, setNwcTarget] = useState(0);
-    const [nwcActual, setNwcActual] = useState(0);
-    const [rwReserveEnabled, setRwReserveEnabled] = useState(false);
-    const [rwReservePercent, setRwReservePercent] = useState(5);
-    const [escrowEnabled, setEscrowEnabled] = useState(false);
-    const [escrowPercent, setEscrowPercent] = useState(10);
-    const [escrowDuration, setEscrowDuration] = useState(12);
+    // M&A Enhancement States (Setters unused but state kept for config object)
+
+    const [nwcEnabled] = useState(false);
+    const [nwcTarget] = useState(0);
+    const [nwcActual] = useState(0);
+    const [rwReserveEnabled] = useState(false);
+    const [rwReservePercent] = useState(5);
+    const [escrowEnabled] = useState(false);
+    const [escrowPercent] = useState(10);
+    const [escrowDuration] = useState(12);
 
     // Sensitivity Analysis State
     // Controlled by viewMode prop now mostly, but we keep params here
@@ -170,7 +170,7 @@ export const WaterfallView: React.FC<WaterfallViewProps> = ({
     }, [payouts, capTable.shareholders, capTable.rounds]);
 
     // Check if there are any preferences and if there are any actual preference payouts
-    const hasPrefPayouts = payouts.some(p => p.preferencePayout > 0);
+
 
     return (
         <div className="space-y-4">
@@ -323,7 +323,7 @@ export const WaterfallView: React.FC<WaterfallViewProps> = ({
                                         </div>
                                     </div>
                                     <div className="grid grid-cols-1 gap-4">
-                                        {conversionAnalysis.map((analysis, index) => {
+                                        {conversionAnalysis.map((analysis) => {
                                             const isConversion = analysis.decision === 'Convert to Ordinary';
                                             const difference = Math.abs(analysis.valueAsConverted - analysis.valueAsPref);
                                             return (

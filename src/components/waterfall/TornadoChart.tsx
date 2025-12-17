@@ -107,7 +107,7 @@ export const TornadoChart: React.FC<TornadoChartProps> = ({ data }) => {
                         <ReferenceLine x={0} stroke="#94a3b8" />
 
                         <Bar dataKey="downside" name="Downside Risk (Bear)" fill="#ef4444" barSize={30} radius={[4, 0, 0, 4]}>
-                            {data.map((entry, index) => (
+                            {data.map((_, index) => (
                                 <Cell key={`cell-${index}`} fill="#ef4444" />
                             ))}
                         </Bar>

@@ -174,7 +174,7 @@ export const ExcelImportView: React.FC<ExcelImportViewProps> = ({ onComplete, on
                     investmentColumnIndex: r.investmentColumn ? headers.indexOf(r.investmentColumn) : undefined
                 }));
 
-            const capTable = processImportedData(headers, data, matches, detectedRounds);
+            const capTable = processImportedData(data, matches, detectedRounds);
             onComplete(capTable);
         } catch (err) {
             console.error(err);
@@ -235,8 +235,8 @@ export const ExcelImportView: React.FC<ExcelImportViewProps> = ({ onComplete, on
                     <div
                         {...getRootProps()}
                         className={`text-center py-16 border-2 border-dashed rounded-xl cursor-pointer transition-all ${isDragActive
-                                ? 'border-emerald-500 bg-emerald-50'
-                                : 'border-slate-300 hover:border-emerald-500 bg-slate-50'
+                            ? 'border-emerald-500 bg-emerald-50'
+                            : 'border-slate-300 hover:border-emerald-500 bg-slate-50'
                             }`}
                     >
                         <input {...getInputProps()} />
@@ -325,7 +325,7 @@ export const ExcelImportView: React.FC<ExcelImportViewProps> = ({ onComplete, on
                         </div>
 
                         <div className="space-y-4">
-                            {rounds.map((round, idx) => (
+                            {rounds.map((round) => (
                                 <div key={round.id} className="border border-slate-200 rounded-lg p-4 bg-slate-50">
                                     <div className="flex items-center justify-between mb-4">
                                         <input

@@ -160,7 +160,6 @@ export const MultiExitComparison: React.FC<MultiExitComparisonProps> = ({
                             {scenarios.map((_, idx) => {
                                 const payout = getPayout(s.id, idx);
                                 const amount = payout?.totalPayout || 0;
-                                const multiple = payout?.multiple || 0;
                                 return (
                                     <td key={idx} className="px-2 py-2 text-center border-l border-dashed border-slate-100">
                                         <span className="font-mono text-slate-600 text-xs">{formatCurrency(amount)}</span>

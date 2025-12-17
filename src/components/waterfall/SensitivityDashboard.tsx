@@ -5,7 +5,7 @@ import { TornadoChart, type TornadoDataPoint } from './TornadoChart';
 import { FormattedNumberInput } from '../ui/FormattedNumberInput';
 import { Tooltip } from '../ui/Tooltip';
 import { formatCurrency } from '../../utils';
-import { TrendingUp, TrendingDown, Target, Rocket, HelpCircle } from 'lucide-react';
+import { TrendingUp, TrendingDown, Target, Rocket } from 'lucide-react';
 import { calculateWaterfall } from '../../engine/WaterfallEngine';
 
 export interface SensitivityDashboardProps {
