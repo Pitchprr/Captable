@@ -3,7 +3,7 @@ import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip, Legend } from 'recha
 import type { CapTable } from '../../engine/types';
 import { calculateCapTableState } from '../../engine/CapTableEngine';
 import { formatPercent, formatNumber } from '../../utils';
-import { CHART_COLORS } from '../../theme';
+import { CHART_COLORS, ROLE_COLORS } from '../../theme';
 
 interface CapTableChartsProps {
     capTable: CapTable;
@@ -33,12 +33,14 @@ export const CapTableCharts: React.FC<CapTableChartsProps> = ({ capTable }) => {
             roleMap.set('Unallocated Pool', unallocatedOptions);
         }
 
-        // Convert to array
-        const result = Array.from(roleMap.entries()).map(([name, value]) => ({
-            name,
-            value,
-            percentage: totalSharesOutstanding > 0 ? (value / totalSharesOutstanding) * 100 : 0
-        }));
+        // Convert to array and filter out zeros
+        const result = Array.from(roleMap.entries())
+            .map(([name, value]) => ({
+                name,
+                value,
+                percentage: totalSharesOutstanding > 0 ? (value / totalSharesOutstanding) * 100 : 0
+            }))
+            .filter(item => item.value > 0);
 
         // Sort by value descending
         return result.sort((a, b) => b.value - a.value);
@@ -64,8 +66,12 @@ export const CapTableCharts: React.FC<CapTableChartsProps> = ({ capTable }) => {
                             dataKey="value"
                             label={({ name, percent }: any) => `${name} ${(percent * 100).toFixed(1)}%`}
                         >
-                            {data.map((_, index) => (
-                                <Cell key={`cell-${index}`} fill={CHART_COLORS[index % CHART_COLORS.length]} strokeWidth={1} />
+                            {data.map((entry, index) => (
+                                <Cell
+                                    key={`cell-${index}`}
+                                    fill={ROLE_COLORS[entry.name] || CHART_COLORS[index % CHART_COLORS.length]}
+                                    strokeWidth={1}
+                                />
                             ))}
                         </Pie>
                         <Tooltip
