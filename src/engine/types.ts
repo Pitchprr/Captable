@@ -94,7 +94,7 @@ export interface CapTableSummaryItem {
 // Waterfall Types
 
 export type PreferenceType = 'Non-Participating' | 'Participating';
-export type PayoutStructure = 'standard' | 'pari-passu';
+export type PayoutStructure = 'standard' | 'pari-passu' | 'common-only';
 export type CarveOutBeneficiary = 'everyone' | 'founders-only' | 'team';
 
 // M&A Enhancement: Escrow configuration
@@ -161,6 +161,7 @@ export interface WaterfallPayout {
     totalPayout: number;
     totalInvested: number; // Total amount invested
     multiple: number; // Return multiple (e.g., 3.5x)
+    equityPercentage: number; // Ownership % (e.g. 0.15 for 15%)
 }
 
 export interface WaterfallStep {
@@ -218,6 +219,7 @@ export interface WaterfallResult {
     steps: WaterfallStep[];
     payouts: WaterfallPayout[];
     conversionAnalysis: ConversionDecision[];
+    effectiveProceeds: number;
 }
 
 export type Currency = 'EUR' | 'USD' | 'GBP' | 'CHF';

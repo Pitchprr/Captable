@@ -1,16 +1,20 @@
 import React, { useState, useMemo } from 'react';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip as RechartsTooltip, Legend, ResponsiveContainer } from 'recharts';
-import { TrendingUp, Layers, ChevronDown, Activity, ArrowDown, Droplets, Coins, Sigma, HelpCircle } from 'lucide-react';
+import {
+    TrendingUp, Layers, ChevronDown, Activity, ArrowDown,
+    Droplets, Coins, Sigma, Download,
+    Settings, ChevronUp, Lock, ShieldAlert, BarChart3, ClipboardList,
+    User, Users, Briefcase, ChevronRight
+} from 'lucide-react';
 import type { CapTable, LiquidationPreference, CarveOutBeneficiary, PayoutStructure } from '../../engine/types';
 import { calculateWaterfall } from '../../engine/WaterfallEngine';
 import { formatCurrency } from '../../utils';
-// unused imports removed
 import { FormattedNumberInput } from '../ui/FormattedNumberInput';
 import { PreferenceConfig } from './PreferenceConfig';
 import { SensitivityDashboard } from './SensitivityDashboard';
 import { MultiExitComparison } from './MultiExitComparison';
 import { ExcelExportModal } from '../ExcelExportModal';
-import { Download } from 'lucide-react';
+import { Tooltip } from '../ui/Tooltip';
 
 interface WaterfallViewProps {
     capTable: CapTable;
@@ -43,10 +47,19 @@ export const WaterfallView: React.FC<WaterfallViewProps> = ({
     earnoutMax = 0,
     viewMode = 'waterfall'
 }) => {
-    const [payoutStructure] = useState<PayoutStructure>('standard');
+    const [payoutStructure, setPayoutStructure] = useState<PayoutStructure>('standard');
     const [expandedStepIndex, setExpandedStepIndex] = useState<number | null>(null);
     const [isCarveOutActive, setIsCarveOutActive] = useState(carveOutPercent > 0);
     const [isExportModalOpen, setIsExportModalOpen] = useState(false);
+    const [expandedPayoutGroups, setExpandedPayoutGroups] = useState<Record<string, boolean>>({
+        founders: true,
+        investors: true,
+        team: true
+    });
+
+    const togglePayoutGroup = (group: string) => {
+        setExpandedPayoutGroups(prev => ({ ...prev, [group]: !prev[group] }));
+    };
 
     // M&A Enhancement States (Setters unused but state kept for config object)
 
@@ -58,6 +71,7 @@ export const WaterfallView: React.FC<WaterfallViewProps> = ({
     const [escrowEnabled, setEscrowEnabled] = useState(false);
     const [escrowPercent, setEscrowPercent] = useState(10);
     const [escrowDuration, setEscrowDuration] = useState(12);
+    const [isMaCollapsed, setIsMaCollapsed] = useState(false);
 
     // Sensitivity Analysis State
     // Controlled by viewMode prop now mostly, but we keep params here
@@ -94,7 +108,7 @@ export const WaterfallView: React.FC<WaterfallViewProps> = ({
         deductOptionStrike: true
     }), [carveOutPercent, isCarveOutActive, carveOutBeneficiary, payoutStructure, nwcEnabled, nwcTarget, nwcActual, rwReserveEnabled, rwReservePercent, escrowEnabled, escrowPercent, escrowDuration]);
 
-    const { steps, payouts, conversionAnalysis } = useMemo(() =>
+    const { steps, payouts, conversionAnalysis, effectiveProceeds } = useMemo(() =>
         calculateWaterfall(capTable, effectiveExitValuation, preferences, maConfig),
         [capTable, effectiveExitValuation, preferences, maConfig]
     );
@@ -120,7 +134,7 @@ export const WaterfallView: React.FC<WaterfallViewProps> = ({
 
 
     const chartData = useMemo(() => {
-        const dataMap = new Map<string, { name: string; Preference: number; Participation: number; CarveOut: number; Invested: number; order: number }>();
+        const dataMap = new Map<string, { name: string; Preference: number; Participation: number; CarveOut: number; Invested: number; order: number; multiple: number; equityPercentage: number }>();
 
         payouts.forEach(p => {
             const shareholder = capTable.shareholders.find(s => s.id === p.shareholderId);
@@ -158,7 +172,9 @@ export const WaterfallView: React.FC<WaterfallViewProps> = ({
                 Participation: 0,
                 CarveOut: 0,
                 Invested: 0,
-                order
+                order,
+                multiple: 0,
+                equityPercentage: 0
             };
 
             current.Preference += p.preferencePayout;
@@ -213,6 +229,69 @@ export const WaterfallView: React.FC<WaterfallViewProps> = ({
                                     </div>
                                 </div>
                             )}
+                            {/* Payout Structure Selection */}
+                            <div className="bg-white p-5 rounded-xl border border-slate-200 shadow-sm">
+                                <div className="flex items-center gap-2 mb-4">
+                                    <h3 className="text-base font-bold text-slate-800">Payout Structure</h3>
+                                    <Tooltip content="Définit comment les priorités (Seniority) sont gérées entre les différents tours d'investissement." />
+                                </div>
+
+                                <div className="space-y-3">
+                                    <button
+                                        onClick={() => setPayoutStructure('standard')}
+                                        className={`w-full p-3 rounded-xl border-2 transition-all text-left ${payoutStructure === 'standard' ? 'border-blue-500 bg-blue-50/50 shadow-sm' : 'border-slate-100 hover:border-slate-200 bg-slate-50/30'}`}
+                                    >
+                                        <div className="flex items-start gap-3">
+                                            <div className={`mt-1 w-4 h-4 rounded-full border-2 flex items-center justify-center shrink-0 ${payoutStructure === 'standard' ? 'border-blue-500' : 'border-slate-300'}`}>
+                                                {payoutStructure === 'standard' && <div className="w-2 h-2 rounded-full bg-blue-500" />}
+                                            </div>
+                                            <div>
+                                                <div className="text-sm font-bold text-slate-800">Standard (Stacked)</div>
+                                                <p className="text-[10px] text-slate-500 leading-tight mt-1">
+                                                    LIFO (Last In, First Out). Les derniers investisseurs sont payés avant les anciens.
+                                                    <span className="block mt-1 font-medium text-slate-600 italic">Pourquoi ? Souvent imposé par les nouveaux investisseurs dans des tours plus risqués.</span>
+                                                </p>
+                                            </div>
+                                        </div>
+                                    </button>
+
+                                    <button
+                                        onClick={() => setPayoutStructure('pari-passu')}
+                                        className={`w-full p-3 rounded-xl border-2 transition-all text-left ${payoutStructure === 'pari-passu' ? 'border-blue-500 bg-blue-50/50 shadow-sm' : 'border-slate-100 hover:border-slate-200 bg-slate-50/30'}`}
+                                    >
+                                        <div className="flex items-start gap-3">
+                                            <div className={`mt-1 w-4 h-4 rounded-full border-2 flex items-center justify-center shrink-0 ${payoutStructure === 'pari-passu' ? 'border-blue-500' : 'border-slate-300'}`}>
+                                                {payoutStructure === 'pari-passu' && <div className="w-2 h-2 rounded-full bg-blue-500" />}
+                                            </div>
+                                            <div>
+                                                <div className="text-sm font-bold text-slate-800">Pari Passu</div>
+                                                <p className="text-[10px] text-slate-500 leading-tight mt-1">
+                                                    Égalité de rang. Tous les investisseurs partagent le gâteau au prorata de leur mise de départ.
+                                                    <span className="block mt-1 font-medium text-slate-600 italic">Pourquoi ? Favorise la collaboration entre les tours d'investissement (plus "Founders-friendly").</span>
+                                                </p>
+                                            </div>
+                                        </div>
+                                    </button>
+
+                                    <button
+                                        onClick={() => setPayoutStructure('common-only')}
+                                        className={`w-full p-3 rounded-xl border-2 transition-all text-left ${payoutStructure === 'common-only' ? 'border-blue-500 bg-blue-50/50 shadow-sm' : 'border-slate-100 hover:border-slate-200 bg-slate-50/30'}`}
+                                    >
+                                        <div className="flex items-start gap-3">
+                                            <div className={`mt-1 w-4 h-4 rounded-full border-2 flex items-center justify-center shrink-0 ${payoutStructure === 'common-only' ? 'border-blue-500' : 'border-slate-300'}`}>
+                                                {payoutStructure === 'common-only' && <div className="w-2 h-2 rounded-full bg-blue-500" />}
+                                            </div>
+                                            <div>
+                                                <div className="text-sm font-bold text-slate-800">Ordinary (Pro-Rata)</div>
+                                                <p className="text-[10px] text-slate-500 leading-tight mt-1">
+                                                    Distribution "pure" au prorata du capital. Toutes les clauses de préférence sont ignorées.
+                                                    <span className="block mt-1 font-medium text-slate-600 italic">Pourquoi ? Utile pour simuler une sortie où les fondateurs et investisseurs sont traités à égalité totale dès le 1er euro.</span>
+                                                </p>
+                                            </div>
+                                        </div>
+                                    </button>
+                                </div>
+                            </div>
                         </div>
                     </div>
 
@@ -283,145 +362,223 @@ export const WaterfallView: React.FC<WaterfallViewProps> = ({
                         </div>
                     </div>
 
-                    {/* 5. M&A Clause Adjustments - Premium Redesign */}
-                    <div className="bg-white p-5 rounded-xl border border-slate-200 shadow-sm relative group hover:border-indigo-300 transition-colors z-0">
-                        <div className="absolute top-0 right-0 p-3 opacity-5 group-hover:opacity-10 transition-opacity">
-                            <Activity className="w-12 h-12" />
-                        </div>
-                        <h3 className="text-sm font-bold text-slate-800 mb-5 flex items-center gap-2 border-b border-slate-100 pb-3">
-                            <Activity className="w-4 h-4 text-indigo-500" />
-                            Pre-Closing Adjustments
-                        </h3>
-
-                        <div className="space-y-4 relative z-10">
-                            {/* NWC Adjustment */}
-                            <div className={`rounded-xl transition-all duration-300 ${nwcEnabled ? 'bg-indigo-50/50 ring-1 ring-indigo-100 shadow-sm p-3.5' : 'hover:bg-slate-50 p-2'}`}>
-                                <div className="flex items-center justify-between">
-                                    <div className="flex items-center gap-2">
-                                        <label className="text-xs font-bold text-slate-700 cursor-pointer" onClick={() => setNwcEnabled(!nwcEnabled)}>Working Capital Adj.</label>
-                                        <div className="relative flex items-center cursor-help">
-                                            <HelpCircle className="peer w-3.5 h-3.5 text-slate-400 hover:text-indigo-500 transition-colors" />
-                                            <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 px-3 py-2 bg-slate-800 text-white text-[10px] leading-tight rounded-lg opacity-0 invisible peer-hover:opacity-100 peer-hover:visible transition-all duration-200 w-48 text-center shadow-xl pointer-events-none z-50">
-                                                Ajustement du prix vs BFR Normatif. Si BFR Réel &gt; Cible = Bonus Vendeur (et inversement).
-                                                <div className="absolute top-full left-1/2 -translate-x-1/2 border-4 border-transparent border-t-slate-800"></div>
-                                            </div>
-                                        </div>
-                                    </div>
-                                    <button
-                                        onClick={() => setNwcEnabled(!nwcEnabled)}
-                                        className={`w-9 h-5 rounded-full relative transition-colors duration-200 focus:outline-none ${nwcEnabled ? 'bg-indigo-500' : 'bg-slate-200'}`}
-                                    >
-                                        <div className={`w-3.5 h-3.5 bg-white rounded-full absolute top-[3px] transition-transform duration-200 shadow-sm ${nwcEnabled ? 'left-[19px]' : 'left-[3px]'}`} />
-                                    </button>
-                                </div>
-                                {nwcEnabled && (
-                                    <div className="grid grid-cols-2 gap-3 mt-3 animate-in fade-in slide-in-from-top-2 duration-300">
-                                        <div>
-                                            <span className="text-[9px] uppercase tracking-wider font-semibold text-slate-400 mb-1 block">Normative Target</span>
-                                            <FormattedNumberInput
-                                                value={nwcTarget}
-                                                onChange={setNwcTarget}
-                                                className="w-full text-xs py-1.5 px-2 rounded-lg border border-slate-200 focus:border-indigo-400 focus:ring-2 focus:ring-indigo-100 outline-none transition-all bg-white"
-                                            />
-                                        </div>
-                                        <div>
-                                            <span className="text-[9px] uppercase tracking-wider font-semibold text-slate-400 mb-1 block">Actual at Closing</span>
-                                            <FormattedNumberInput
-                                                value={nwcActual}
-                                                onChange={setNwcActual}
-                                                className="w-full text-xs py-1.5 px-2 rounded-lg border border-slate-200 focus:border-indigo-400 focus:ring-2 focus:ring-indigo-100 outline-none transition-all bg-white"
-                                            />
-                                        </div>
-                                    </div>
-                                )}
+                    {/* 5. M&A Clause Adjustments - New Look */}
+                    <div className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
+                        <div className="p-4 border-b border-slate-100 flex items-center justify-between bg-slate-50/50">
+                            <div className="flex items-center gap-2">
+                                <Settings className="w-4 h-4 text-slate-400" />
+                                <h3 className="text-sm font-bold text-slate-800">M&A Adjustments</h3>
+                                <Tooltip content="Ajustements financiers appliqués à la valeur d'entreprise pour arriver au montant net distribuable aux actionnaires." />
                             </div>
+                            <button
+                                onClick={() => setIsMaCollapsed(!isMaCollapsed)}
+                                className="text-xs font-semibold text-slate-500 hover:text-slate-800 transition-colors flex items-center gap-1"
+                            >
+                                {isMaCollapsed ? <><ChevronDown className="w-3.5 h-3.5" /> Show</> : <><ChevronUp className="w-3.5 h-3.5" /> Hide</>}
+                            </button>
+                        </div>
 
-                            {/* Escrow */}
-                            <div className={`rounded-xl transition-all duration-300 ${escrowEnabled ? 'bg-indigo-50/50 ring-1 ring-indigo-100 shadow-sm p-3.5' : 'hover:bg-slate-50 p-2'}`}>
-                                <div className="flex items-center justify-between">
-                                    <div className="flex items-center gap-2">
-                                        <label className="text-xs font-bold text-slate-700 cursor-pointer" onClick={() => setEscrowEnabled(!escrowEnabled)}>Indemnity Escrow</label>
-                                        <div className="relative flex items-center cursor-help">
-                                            <HelpCircle className="peer w-3.5 h-3.5 text-slate-400 hover:text-indigo-500 transition-colors" />
-                                            <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 px-3 py-2 bg-slate-800 text-white text-[10px] leading-tight rounded-lg opacity-0 invisible peer-hover:opacity-100 peer-hover:visible transition-all duration-200 w-48 text-center shadow-xl pointer-events-none z-50">
-                                                Somme séquestrée pour garantir les obligations d'indemnisation du vendeur post-closing.
-                                                <div className="absolute top-full left-1/2 -translate-x-1/2 border-4 border-transparent border-t-slate-800"></div>
+                        {!isMaCollapsed && (
+                            <div className="p-4 space-y-4 animate-in fade-in slide-in-from-top-2 duration-300">
+                                {/* Escrow Card */}
+                                <div className={`p-4 rounded-xl border transition-all ${escrowEnabled ? 'bg-blue-50/30 border-blue-200 shadow-sm' : 'bg-slate-50 border-slate-200 opacity-60'}`}>
+                                    <div className="flex items-center justify-between mb-3">
+                                        <div className="flex items-center gap-2">
+                                            <div className={`p-1.5 rounded-lg ${escrowEnabled ? 'bg-blue-100 text-blue-600' : 'bg-slate-200 text-slate-400'}`}>
+                                                <Lock className="w-4 h-4" />
+                                            </div>
+                                            <div>
+                                                <div className="flex items-center gap-1.5">
+                                                    <h4 className="text-sm font-bold text-slate-800">Escrow on Upfront</h4>
+                                                    <Tooltip content="Une partie du prix est bloquée sur un compte tiers (séquestre) pour garantir les éventuelles réclamations de l'acheteur." />
+                                                </div>
+                                                <p className="text-[10px] text-slate-500 leading-none mt-0.5">Hold portion of upfront for claims</p>
                                             </div>
                                         </div>
+                                        <button
+                                            onClick={() => setEscrowEnabled(!escrowEnabled)}
+                                            className={`w-9 h-5 rounded-full relative transition-colors duration-200 ${escrowEnabled ? 'bg-blue-600' : 'bg-slate-300'}`}
+                                        >
+                                            <div className={`w-3.5 h-3.5 bg-white rounded-full absolute top-[3px] transition-transform duration-200 shadow-sm ${escrowEnabled ? 'left-[19px]' : 'left-[3px]'}`} />
+                                        </button>
                                     </div>
-                                    <button
-                                        onClick={() => setEscrowEnabled(!escrowEnabled)}
-                                        className={`w-9 h-5 rounded-full relative transition-colors duration-200 focus:outline-none ${escrowEnabled ? 'bg-indigo-500' : 'bg-slate-200'}`}
-                                    >
-                                        <div className={`w-3.5 h-3.5 bg-white rounded-full absolute top-[3px] transition-transform duration-200 shadow-sm ${escrowEnabled ? 'left-[19px]' : 'left-[3px]'}`} />
-                                    </button>
-                                </div>
-                                {escrowEnabled && (
-                                    <div className="grid grid-cols-2 gap-3 mt-3 animate-in fade-in slide-in-from-top-2 duration-300">
+
+                                    <div className="grid grid-cols-2 gap-3 mt-4">
                                         <div>
-                                            <span className="text-[9px] uppercase tracking-wider font-semibold text-slate-400 mb-1 block">Amount (%)</span>
-                                            <div className="relative">
-                                                <input
-                                                    type="number"
-                                                    value={escrowPercent}
-                                                    onChange={(e) => setEscrowPercent(Number(e.target.value))}
-                                                    className="w-full text-xs py-1.5 px-2 pr-5 rounded-lg border border-slate-200 focus:border-indigo-400 focus:ring-2 focus:ring-indigo-100 outline-none transition-all bg-white"
-                                                />
-                                                <span className="absolute right-2 top-1.5 text-[10px] text-slate-400 font-bold">%</span>
-                                            </div>
+                                            <label className="text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1 block">% Held</label>
+                                            <input
+                                                type="number"
+                                                value={escrowPercent}
+                                                onChange={(e) => setEscrowPercent(Number(e.target.value))}
+                                                className="w-full text-sm py-2 px-3 border border-slate-200 rounded-lg focus:ring-2 focus:ring-blue-100 outline-none transition-all bg-white font-medium"
+                                            />
                                         </div>
                                         <div>
-                                            <span className="text-[9px] uppercase tracking-wider font-semibold text-slate-400 mb-1 block">Duration (Months)</span>
+                                            <label className="text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1 block">Duration (months)</label>
                                             <input
                                                 type="number"
                                                 value={escrowDuration}
                                                 onChange={(e) => setEscrowDuration(Number(e.target.value))}
-                                                className="w-full text-xs py-1.5 px-2 rounded-lg border border-slate-200 focus:border-indigo-400 focus:ring-2 focus:ring-indigo-100 outline-none transition-all bg-white"
+                                                className="w-full text-sm py-2 px-3 border border-slate-200 rounded-lg focus:ring-2 focus:ring-blue-100 outline-none transition-all bg-white font-medium"
                                             />
                                         </div>
                                     </div>
-                                )}
-                            </div>
 
-                            {/* R&W Reserve */}
-                            <div className={`rounded-xl transition-all duration-300 ${rwReserveEnabled ? 'bg-indigo-50/50 ring-1 ring-indigo-100 shadow-sm p-3.5' : 'hover:bg-slate-50 p-2'}`}>
-                                <div className="flex items-center justify-between">
-                                    <div className="flex items-center gap-2">
-                                        <label className="text-xs font-bold text-slate-700 cursor-pointer" onClick={() => setRwReserveEnabled(!rwReserveEnabled)}>R&W Reserve</label>
-                                        <div className="relative flex items-center cursor-help">
-                                            <HelpCircle className="peer w-3.5 h-3.5 text-slate-400 hover:text-indigo-500 transition-colors" />
-                                            <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 px-3 py-2 bg-slate-800 text-white text-[10px] leading-tight rounded-lg opacity-0 invisible peer-hover:opacity-100 peer-hover:visible transition-all duration-200 w-48 text-center shadow-xl pointer-events-none z-50">
-                                                Réserve spécifique pour couvrir les brèches potentielles de Garanties de Passif (Representations & Warranties).
-                                                <div className="absolute top-full left-1/2 -translate-x-1/2 border-4 border-transparent border-t-slate-800"></div>
+                                    {escrowEnabled && (
+                                        <div className="mt-4 bg-blue-100/50 p-2 rounded-lg border border-blue-200 text-center animate-in zoom-in-95 duration-200">
+                                            <span className="text-sm font-bold text-blue-700">
+                                                Escrow: {formatCurrency(effectiveExitValuation * (escrowPercent / 100))}
+                                            </span>
+                                        </div>
+                                    )}
+                                </div>
+
+                                {/* R&W Reserve Card */}
+                                <div className={`p-4 rounded-xl border transition-all ${rwReserveEnabled ? 'bg-red-50/30 border-red-200 shadow-sm' : 'bg-slate-50 border-slate-200 opacity-60'}`}>
+                                    <div className="flex items-center justify-between mb-3">
+                                        <div className="flex items-center gap-2">
+                                            <div className={`p-1.5 rounded-lg ${rwReserveEnabled ? 'bg-red-100 text-red-600' : 'bg-slate-200 text-slate-400'}`}>
+                                                <ShieldAlert className="w-4 h-4" />
+                                            </div>
+                                            <div>
+                                                <div className="flex items-center gap-1.5">
+                                                    <h4 className="text-sm font-bold text-slate-800">R&W Reserve</h4>
+                                                    <Tooltip content="Réserve spécifique pour couvrir les risques liés aux Déclarations et Garanties (Representations & Warranties)." />
+                                                </div>
+                                                <p className="text-[10px] text-slate-500 leading-none mt-0.5">Representations & Warranties claims</p>
+                                            </div>
+                                        </div>
+                                        <button
+                                            onClick={() => setRwReserveEnabled(!rwReserveEnabled)}
+                                            className={`w-9 h-5 rounded-full relative transition-colors duration-200 ${rwReserveEnabled ? 'bg-red-600' : 'bg-slate-300'}`}
+                                        >
+                                            <div className={`w-3.5 h-3.5 bg-white rounded-full absolute top-[3px] transition-transform duration-200 shadow-sm ${rwReserveEnabled ? 'left-[19px]' : 'left-[3px]'}`} />
+                                        </button>
+                                    </div>
+
+                                    <div className="mt-4">
+                                        <label className="text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1 block">% Reserved for R&W</label>
+                                        <input
+                                            type="number"
+                                            value={rwReservePercent}
+                                            onChange={(e) => setRwReservePercent(Number(e.target.value))}
+                                            className="w-full text-sm py-2 px-3 border border-slate-200 rounded-lg focus:ring-2 focus:ring-red-100 outline-none transition-all bg-white font-medium"
+                                        />
+                                    </div>
+
+                                    {rwReserveEnabled && (
+                                        <div className="mt-4 bg-red-100/50 p-2 rounded-lg border border-red-200 text-center animate-in zoom-in-95 duration-200">
+                                            <span className="text-sm font-bold text-red-700">
+                                                Reserve: {formatCurrency(effectiveExitValuation * (rwReservePercent / 100))}
+                                            </span>
+                                        </div>
+                                    )}
+                                </div>
+
+                                {/* NWC Adjustment Card */}
+                                <div className={`p-4 rounded-xl border transition-all ${nwcEnabled ? 'bg-emerald-50/30 border-emerald-200 shadow-sm' : 'bg-slate-50 border-slate-200 opacity-60'}`}>
+                                    <div className="flex items-center justify-between mb-3">
+                                        <div className="flex items-center gap-2">
+                                            <div className={`p-1.5 rounded-lg ${nwcEnabled ? 'bg-emerald-100 text-emerald-600' : 'bg-slate-200 text-slate-400'}`}>
+                                                <BarChart3 className="w-4 h-4" />
+                                            </div>
+                                            <div>
+                                                <div className="flex items-center gap-1.5">
+                                                    <h4 className="text-sm font-bold text-slate-800">Net Working Capital</h4>
+                                                    <Tooltip content="Ajustement lié à la différence entre le BFR réel à la clôture et un BFR cible défini dans le SPA." />
+                                                </div>
+                                                <p className="text-[10px] text-slate-500 leading-none mt-0.5">Adjust for NWC variance at closing</p>
+                                            </div>
+                                        </div>
+                                        <button
+                                            onClick={() => setNwcEnabled(!nwcEnabled)}
+                                            className={`w-9 h-5 rounded-full relative transition-colors duration-200 ${nwcEnabled ? 'bg-emerald-600' : 'bg-slate-300'}`}
+                                        >
+                                            <div className={`w-3.5 h-3.5 bg-white rounded-full absolute top-[3px] transition-transform duration-200 shadow-sm ${nwcEnabled ? 'left-[19px]' : 'left-[3px]'}`} />
+                                        </button>
+                                    </div>
+
+                                    <div className="grid grid-cols-2 gap-3 mt-4">
+                                        <div>
+                                            <label className="text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1 block">Target NWC (SPA)</label>
+                                            <FormattedNumberInput
+                                                value={nwcTarget}
+                                                onChange={setNwcTarget}
+                                                className="w-full text-sm py-2 px-3 border border-slate-200 rounded-lg focus:ring-2 focus:ring-emerald-100 outline-none transition-all bg-white font-medium"
+                                            />
+                                        </div>
+                                        <div>
+                                            <label className="text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1 block">Actual NWC (Closing)</label>
+                                            <FormattedNumberInput
+                                                value={nwcActual}
+                                                onChange={setNwcActual}
+                                                className="w-full text-sm py-2 px-3 border border-slate-200 rounded-lg focus:ring-2 focus:ring-emerald-100 outline-none transition-all bg-white font-medium"
+                                            />
+                                        </div>
+                                    </div>
+
+                                    {nwcEnabled && (
+                                        <div className="mt-4 bg-emerald-100/50 p-2 rounded-lg border border-emerald-200 text-center animate-in zoom-in-95 duration-200">
+                                            <span className="text-sm font-bold text-emerald-700">
+                                                Adjustment: {(nwcActual - nwcTarget) >= 0 ? '+' : ''}{formatCurrency(nwcActual - nwcTarget)} {(nwcActual - nwcTarget) >= 0 ? '(Seller bonus)' : '(Buyer discount)'}
+                                            </span>
+                                        </div>
+                                    )}
+                                </div>
+
+                                {/* Calculation Summary Table Card */}
+                                <div className="bg-slate-900 rounded-xl p-5 text-white shadow-xl shadow-slate-950/20">
+                                    <div className="flex items-center gap-2 mb-4 pb-3 border-b border-slate-800">
+                                        <ClipboardList className="w-4 h-4 text-slate-400" />
+                                        <h4 className="text-xs font-bold uppercase tracking-widest text-slate-300">Effective Proceeds Calculation</h4>
+                                    </div>
+
+                                    <div className="space-y-2.5">
+                                        <div className="flex justify-between items-center text-sm">
+                                            <span className="text-slate-400">Exit Valuation</span>
+                                            <span className="font-mono font-bold">{formatCurrency(effectiveExitValuation)}</span>
+                                        </div>
+
+                                        {escrowEnabled && (
+                                            <div className="flex justify-between items-center text-sm">
+                                                <span className="text-slate-400">- Escrow ({escrowPercent}%)</span>
+                                                <span className="font-mono font-bold text-blue-400">-{formatCurrency(effectiveExitValuation * (escrowPercent / 100))}</span>
+                                            </div>
+                                        )}
+
+                                        {rwReserveEnabled && (
+                                            <div className="flex justify-between items-center text-sm">
+                                                <span className="text-slate-400">- R&W Reserve ({rwReservePercent}%)</span>
+                                                <span className="font-mono font-bold text-red-400">-{formatCurrency(effectiveExitValuation * (rwReservePercent / 100))}</span>
+                                            </div>
+                                        )}
+
+                                        {nwcEnabled && (
+                                            <div className="flex justify-between items-center text-sm">
+                                                <span className="text-slate-400">{(nwcActual - nwcTarget) >= 0 ? '+ NWC Bonus' : '- NWC Discount'}</span>
+                                                <span className={`font-mono font-bold ${(nwcActual - nwcTarget) >= 0 ? 'text-emerald-400' : 'text-red-400'}`}>
+                                                    {(nwcActual - nwcTarget) >= 0 ? '+' : ''}{formatCurrency(nwcActual - nwcTarget)}
+                                                </span>
+                                            </div>
+                                        )}
+
+                                        <div className="pt-3 border-t border-slate-800 flex justify-between items-end mt-2">
+                                            <span className="text-xs font-bold uppercase tracking-wider text-slate-500">Distributable Proceeds</span>
+                                            <div className="text-right">
+                                                <div className="text-lg font-bold text-emerald-400 leading-tight">
+                                                    {formatCurrency(
+                                                        effectiveExitValuation
+                                                        - (escrowEnabled ? effectiveExitValuation * (escrowPercent / 100) : 0)
+                                                        - (rwReserveEnabled ? effectiveExitValuation * (rwReservePercent / 100) : 0)
+                                                        + (nwcEnabled ? (nwcActual - nwcTarget) : 0)
+                                                    )}
+                                                </div>
                                             </div>
                                         </div>
                                     </div>
-                                    <button
-                                        onClick={() => setRwReserveEnabled(!rwReserveEnabled)}
-                                        className={`w-9 h-5 rounded-full relative transition-colors duration-200 focus:outline-none ${rwReserveEnabled ? 'bg-indigo-500' : 'bg-slate-200'}`}
-                                    >
-                                        <div className={`w-3.5 h-3.5 bg-white rounded-full absolute top-[3px] transition-transform duration-200 shadow-sm ${rwReserveEnabled ? 'left-[19px]' : 'left-[3px]'}`} />
-                                    </button>
                                 </div>
-                                {rwReserveEnabled && (
-                                    <div className="mt-3 animate-in fade-in slide-in-from-top-2 duration-300">
-                                        <div className="flex justify-between items-center mb-1">
-                                            <span className="text-[9px] uppercase tracking-wider font-semibold text-slate-400">Reserved Amount</span>
-                                            <span className="text-xs font-bold text-indigo-600 bg-indigo-50 px-2 py-0.5 rounded">{rwReservePercent}%</span>
-                                        </div>
-                                        <input
-                                            type="range"
-                                            min="0"
-                                            max="20"
-                                            step="0.5"
-                                            value={rwReservePercent}
-                                            onChange={(e) => setRwReservePercent(Number(e.target.value))}
-                                            className="w-full accent-indigo-500 h-1.5 bg-slate-200 rounded-lg appearance-none cursor-pointer"
-                                        />
-                                    </div>
-                                )}
                             </div>
-                        </div>
+                        )}
                     </div>
                 </div>
 
@@ -548,60 +705,156 @@ export const WaterfallView: React.FC<WaterfallViewProps> = ({
                             {/* Detailed Payouts Table */}
                             <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
                                 <div className="px-6 py-4 border-b border-slate-100 flex justify-between items-center bg-slate-50/50">
-                                    <h3 className="font-bold text-slate-800">Shareholder Payouts</h3>
-                                    <div className="text-sm text-slate-500">
-                                        Total Distributed: <span className="font-bold text-slate-900">{formatCurrency(effectiveExitValuation)}</span>
+                                    <div className="flex items-center gap-3">
+                                        <div className="p-2 bg-indigo-100 rounded-lg text-indigo-600">
+                                            <Users className="w-5 h-5" />
+                                        </div>
+                                        <h3 className="font-bold text-slate-800 text-lg">Detailed Distribution per Shareholder</h3>
+                                    </div>
+                                    <div className="text-right">
+                                        <div className="text-[10px] font-bold text-slate-400 uppercase tracking-widest leading-none mb-1">Total Net Proceeds</div>
+                                        <div className="text-xl font-bold text-slate-900">{formatCurrency(effectiveProceeds)}</div>
                                     </div>
                                 </div>
                                 <div className="overflow-x-auto">
-                                    <table className="w-full text-sm text-left">
-                                        <thead className="text-xs text-slate-500 uppercase bg-slate-50 border-b border-slate-100">
+                                    <table className="w-full text-sm text-left border-collapse">
+                                        <thead className="text-[10px] text-slate-500 uppercase tracking-wider bg-slate-50/80 border-b border-slate-200">
                                             <tr>
-                                                <th className="px-6 py-3 font-semibold">Shareholder</th>
-                                                <th className="px-6 py-3 font-semibold text-right">Invested</th>
-                                                <th className="px-6 py-3 font-semibold text-right">Preference</th>
-                                                <th className="px-6 py-3 font-semibold text-right">Participation</th>
-                                                {carveOutPercent > 0 && <th className="px-6 py-3 font-semibold text-right text-amber-600">Carve-Out</th>}
-                                                <th className="px-6 py-3 font-semibold text-right">Total Payout</th>
-                                                <th className="px-6 py-3 font-semibold text-right">Multiple</th>
+                                                <th className="px-6 py-3 font-bold sticky left-0 bg-white z-10 w-64 border-r border-slate-100">Shareholder</th>
+                                                <th className="px-4 py-3 font-bold text-right hidden sm:table-cell">Invested</th>
+                                                <th className="px-4 py-3 font-bold text-right">Preference</th>
+                                                <th className="px-4 py-3 font-bold text-right">Participation</th>
+                                                {carveOutPercent > 0 && <th className="px-4 py-3 font-bold text-right text-amber-600">Carve-Out</th>}
+                                                <th className="px-6 py-3 font-bold text-right bg-slate-100/30">Total Payout</th>
+                                                <th className="px-4 py-3 font-bold text-right text-indigo-500">Eq. %</th>
+                                                <th className="px-4 py-3 font-bold text-right text-emerald-500">Payout %</th>
+                                                <th className="px-4 py-3 font-bold text-right">Multiple</th>
                                             </tr>
                                         </thead>
                                         <tbody className="divide-y divide-slate-100">
-                                            {payouts.sort((a, b) => b.totalPayout - a.totalPayout).map((p) => (
-                                                <tr key={p.shareholderId} className="hover:bg-slate-50/80 transition-colors">
-                                                    <td className="px-6 py-3 font-medium text-slate-900">{p.shareholderName}</td>
-                                                    <td className="px-6 py-3 text-right text-slate-500">{formatCurrency(p.totalInvested)}</td>
-                                                    <td className="px-6 py-3 text-right text-slate-600 font-medium">{p.preferencePayout > 0 ? formatCurrency(p.preferencePayout) : '-'}</td>
-                                                    <td className="px-6 py-3 text-right text-slate-600">{p.participationPayout > 0 ? formatCurrency(p.participationPayout) : '-'}</td>
-                                                    {carveOutPercent > 0 && (
-                                                        <td className="px-6 py-3 text-right text-amber-600 font-medium bg-amber-50/30">
-                                                            {p.carveOutPayout > 0 ? formatCurrency(p.carveOutPayout) : '-'}
-                                                        </td>
-                                                    )}
-                                                    <td className="px-6 py-3 text-right font-bold text-indigo-600 bg-indigo-50/10">
-                                                        {formatCurrency(p.totalPayout)}
-                                                    </td>
-                                                    <td className="px-6 py-3 text-right">
-                                                        <span className={`px-2 py-1 rounded-full text-xs font-bold ${p.multiple >= 5 ? 'bg-green-100 text-green-700' :
-                                                            p.multiple >= 2 ? 'bg-blue-100 text-blue-700' :
-                                                                p.multiple >= 1 ? 'bg-slate-100 text-slate-700' :
-                                                                    'bg-red-50 text-red-600'
-                                                            }`}>
-                                                            {p.multiple.toFixed(2)}x
-                                                        </span>
-                                                    </td>
-                                                </tr>
-                                            ))}
-                                            {/* Footer Totals */}
-                                            <tr className="bg-slate-50 font-bold border-t-2 border-slate-200">
-                                                <td className="px-6 py-3">Total</td>
-                                                <td className="px-6 py-3 text-right">{formatCurrency(payouts.reduce((sum, p) => sum + p.totalInvested, 0))}</td>
-                                                <td className="px-6 py-3 text-right">{formatCurrency(payouts.reduce((sum, p) => sum + p.preferencePayout, 0))}</td>
-                                                <td className="px-6 py-3 text-right">{formatCurrency(payouts.reduce((sum, p) => sum + p.participationPayout, 0))}</td>
-                                                {carveOutPercent > 0 && <td className="px-6 py-3 text-right text-amber-700">{formatCurrency(payouts.reduce((sum, p) => sum + p.carveOutPayout, 0))}</td>}
-                                                <td className="px-6 py-3 text-right text-indigo-700">{formatCurrency(payouts.reduce((sum, p) => sum + p.totalPayout, 0))}</td>
-                                                <td className="px-6 py-3 text-right">-</td>
-                                            </tr>
+                                            {(() => {
+                                                const founders = payouts.filter(p => capTable.shareholders.find(s => s.id === p.shareholderId)?.role === 'Founder');
+                                                const team = payouts.filter(p => ['Employee', 'Advisor'].includes(capTable.shareholders.find(s => s.id === p.shareholderId)?.role || ''));
+                                                const investors = payouts.filter(p => !founders.includes(p) && !team.includes(p));
+
+                                                const renderGroup = (key: string, label: string, icon: React.ReactNode, groupPayouts: any[], iconColor: string) => {
+                                                    const isExpanded = expandedPayoutGroups[key];
+                                                    const groupTotalInvested = groupPayouts.reduce((sum, p) => sum + p.totalInvested, 0);
+                                                    const groupTotalPref = groupPayouts.reduce((sum, p) => sum + p.preferencePayout, 0);
+                                                    const groupTotalPart = groupPayouts.reduce((sum, p) => sum + p.participationPayout, 0);
+                                                    const groupTotalCarve = groupPayouts.reduce((sum, p) => sum + p.carveOutPayout, 0);
+                                                    const groupTotal = groupPayouts.reduce((sum, p) => sum + p.totalPayout, 0);
+                                                    const groupEquity = groupPayouts.reduce((sum, p) => sum + p.equityPercentage, 0);
+
+                                                    if (groupPayouts.length === 0) return null;
+
+                                                    return (
+                                                        <>
+                                                            {/* Group Header */}
+                                                            <tr
+                                                                onClick={() => togglePayoutGroup(key)}
+                                                                className="bg-slate-50/50 hover:bg-slate-100 cursor-pointer transition-colors border-y border-slate-200/60"
+                                                            >
+                                                                <td className="px-6 py-2.5 sticky left-0 bg-inherit border-r border-slate-100 z-10">
+                                                                    <div className="flex items-center gap-3">
+                                                                        <div className="text-slate-400">
+                                                                            {isExpanded ? <ChevronDown className="w-4 h-4" /> : <ChevronRight className="w-4 h-4" />}
+                                                                        </div>
+                                                                        <div className={`${iconColor}`}>
+                                                                            {icon}
+                                                                        </div>
+                                                                        <span className="font-bold text-slate-700 uppercase tracking-wide text-xs">
+                                                                            {label}
+                                                                            <span className="ml-1 text-slate-400 normal-case font-medium">({groupPayouts.length})</span>
+                                                                        </span>
+                                                                    </div>
+                                                                </td>
+                                                                <td className="px-4 py-2 text-right hidden sm:table-cell font-mono text-[11px] text-slate-400">{formatCurrency(groupTotalInvested)}</td>
+                                                                <td className="px-4 py-2 text-right font-mono font-bold text-xs text-slate-600">{formatCurrency(groupTotalPref)}</td>
+                                                                <td className="px-4 py-2 text-right font-mono font-bold text-xs text-slate-600">{formatCurrency(groupTotalPart)}</td>
+                                                                {carveOutPercent > 0 && <td className="px-4 py-2 text-right font-mono font-bold text-xs text-amber-600">{formatCurrency(groupTotalCarve)}</td>}
+                                                                <td className="px-6 py-2 text-right font-mono font-bold text-sm bg-slate-100/30 text-indigo-700">{formatCurrency(groupTotal)}</td>
+                                                                <td className="px-4 py-2 text-right font-bold text-indigo-500 text-xs">
+                                                                    {(groupEquity * 100).toFixed(1)}%
+                                                                </td>
+                                                                <td className="px-4 py-2 text-right font-bold text-emerald-500 text-xs">
+                                                                    {((groupTotal / (effectiveProceeds || 1)) * 100).toFixed(1)}%
+                                                                </td>
+                                                                <td className="px-4 py-2 text-right">
+                                                                    <span className="px-2 py-0.5 rounded bg-slate-200 text-slate-600 text-[10px] font-bold">
+                                                                        {(groupTotal / (groupTotalInvested || 1)).toFixed(2)}x
+                                                                    </span>
+                                                                </td>
+                                                            </tr>
+                                                            {/* Group Children */}
+                                                            {isExpanded && groupPayouts.sort((a, b) => b.totalPayout - a.totalPayout).map((p) => (
+                                                                <tr key={p.shareholderId} className="hover:bg-slate-50 transition-colors group">
+                                                                    <td className="px-6 py-3 pl-12 sticky left-0 bg-white border-r border-slate-100 z-10">
+                                                                        <div className="flex flex-col">
+                                                                            <span className="font-medium text-slate-900">
+                                                                                {p.shareholderName}
+                                                                            </span>
+                                                                            <span className="text-[10px] text-slate-400 uppercase tracking-tighter">
+                                                                                {capTable.shareholders.find(s => s.id === p.shareholderId)?.role}
+                                                                            </span>
+                                                                        </div>
+                                                                    </td>
+                                                                    <td className="px-4 py-3 text-right hidden sm:table-cell font-mono text-xs text-slate-400">{formatCurrency(p.totalInvested)}</td>
+                                                                    <td className="px-4 py-3 text-right font-mono text-xs text-slate-500">{p.preferencePayout > 0 ? formatCurrency(p.preferencePayout) : '-'}</td>
+                                                                    <td className="px-4 py-3 text-right font-mono text-xs text-slate-500">{p.participationPayout > 0 ? formatCurrency(p.participationPayout) : '-'}</td>
+                                                                    {carveOutPercent > 0 && (
+                                                                        <td className="px-4 py-3 text-right font-mono text-xs text-amber-500">
+                                                                            {p.carveOutPayout > 0 ? formatCurrency(p.carveOutPayout) : '-'}
+                                                                        </td>
+                                                                    )}
+                                                                    <td className="px-6 py-3 text-right font-mono font-bold text-sm group-hover:text-indigo-600 transition-colors">
+                                                                        {formatCurrency(p.totalPayout)}
+                                                                    </td>
+                                                                    <td className="px-4 py-3 text-right font-medium text-indigo-400 text-xs">
+                                                                        {(p.equityPercentage * 100).toFixed(1)}%
+                                                                    </td>
+                                                                    <td className="px-4 py-3 text-right font-medium text-emerald-400 text-xs">
+                                                                        {((p.totalPayout / (effectiveProceeds || 1)) * 100).toFixed(1)}%
+                                                                    </td>
+                                                                    <td className="px-4 py-3 text-right">
+                                                                        <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${p.multiple >= 5 ? 'bg-emerald-100 text-emerald-700' :
+                                                                            p.multiple >= 2 ? 'bg-blue-100 text-blue-700' :
+                                                                                p.multiple >= 1 ? 'bg-slate-100 text-slate-600' :
+                                                                                    'bg-rose-50 text-rose-600'
+                                                                            }`}>
+                                                                            {p.multiple.toFixed(2)}x
+                                                                        </span>
+                                                                    </td>
+                                                                </tr>
+                                                            ))}
+                                                        </>
+                                                    );
+                                                };
+
+                                                return (
+                                                    <>
+                                                        {renderGroup('founders', 'Founders', <User className="w-4 h-4" />, founders, 'text-blue-500')}
+                                                        {renderGroup('investors', 'Investors', <Briefcase className="w-4 h-4" />, investors, 'text-emerald-500')}
+                                                        {renderGroup('team', 'Team & Employees', <Users className="w-4 h-4" />, team, 'text-amber-500')}
+
+                                                        {/* Total Footer */}
+                                                        <tr className="bg-slate-900 text-white font-bold">
+                                                            <td className="px-6 py-4 sticky left-0 bg-slate-900 border-r border-slate-800 z-10 text-xs uppercase tracking-widest">Grand Total</td>
+                                                            <td className="px-4 py-4 text-right hidden sm:table-cell font-mono text-xs text-slate-400">{formatCurrency(payouts.reduce((sum, p) => sum + p.totalInvested, 0))}</td>
+                                                            <td className="px-4 py-4 text-right font-mono text-xs text-slate-300">{formatCurrency(payouts.reduce((sum, p) => sum + p.preferencePayout, 0))}</td>
+                                                            <td className="px-4 py-4 text-right font-mono text-xs text-slate-300">{formatCurrency(payouts.reduce((sum, p) => sum + p.participationPayout, 0))}</td>
+                                                            {carveOutPercent > 0 && <td className="px-4 py-4 text-right font-mono text-xs text-amber-400">{formatCurrency(payouts.reduce((sum, p) => sum + p.carveOutPayout, 0))}</td>}
+                                                            <td className="px-6 py-4 text-right font-mono text-base text-emerald-400">{formatCurrency(effectiveProceeds)}</td>
+                                                            <td className="px-4 py-4 text-right text-indigo-300">{(payouts.reduce((sum, p) => sum + p.equityPercentage, 0) * 100).toFixed(1)}%</td>
+                                                            <td className="px-4 py-4 text-right text-emerald-500/80">100%</td>
+                                                            <td className="px-4 py-4 text-right">
+                                                                <span className="text-[10px] text-slate-500 uppercase">Avg: </span>
+                                                                <span className="text-xs">{(effectiveExitValuation / (payouts.reduce((sum, p) => sum + p.totalInvested, 0) || 1)).toFixed(2)}x</span>
+                                                            </td>
+                                                        </tr>
+                                                    </>
+                                                );
+                                            })()}
                                         </tbody>
                                     </table>
                                 </div>

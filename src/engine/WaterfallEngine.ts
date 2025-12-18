@@ -47,9 +47,15 @@ export const calculateWaterfall = (
         });
     }
 
+    // Calculate total allocated FD shares (Base 100) - sum of all shares and options held by people
+    const totalAllocatedShares = summary.reduce((sum, s) => sum + s.totalShares + s.totalOptions, 0);
+
     // Initialize payouts
     const payouts = new Map<string, WaterfallPayout>();
     summary.forEach(s => {
+        const shareholderFD = s.totalShares + s.totalOptions;
+        const equityPercentBase100 = totalAllocatedShares > 0 ? shareholderFD / totalAllocatedShares : 0;
+
         payouts.set(s.shareholderId, {
             shareholderId: s.shareholderId,
             shareholderName: s.shareholderName,
@@ -58,7 +64,8 @@ export const calculateWaterfall = (
             participationPayout: 0,
             totalPayout: 0,
             totalInvested: 0,
-            multiple: 0
+            multiple: 0,
+            equityPercentage: equityPercentBase100
         });
     });
 
@@ -111,34 +118,58 @@ export const calculateWaterfall = (
         totalFullyDilutedShares += s.totalShares + s.totalOptions;
     });
 
-    // Helper to calculate theoretical value as Ordinary
-    const calculateAsConvertedValue = (shares: number) => {
-        if (totalFullyDilutedShares === 0) return 0;
-        return (shares / totalFullyDilutedShares) * effectiveProceeds;
-    };
-
-    // Sort preferences by seniority (higher seniority = paid first)
-    const sortedPrefsForAnalysis = [...preferences].sort((a, b) => b.seniority - a.seniority);
+    // Sort preferences by seniority (Rank 1 is the most senior, paid first = LIFO)
+    const sortedPrefsForAnalysis = [...preferences].sort((a, b) => a.seniority - b.seniority);
 
     // Calculate actual preference payouts considering seniority and available proceeds
-    let remainingForPrefAnalysis = effectiveProceeds;
+    let remainingForAnalysis = effectiveProceeds;
     const actualPrefPayouts = new Map<string, number>();
 
-    sortedPrefsForAnalysis.forEach(pref => {
-        const round = capTable.rounds.find(r => r.id === pref.roundId);
-        if (round) {
-            let prefClaim = 0;
-            round.investments.forEach(inv => {
-                prefClaim += inv.amount * pref.multiple;
-            });
-
-            // Actual payout is min of claim and remaining proceeds
-            const actualPayout = Math.min(prefClaim, remainingForPrefAnalysis);
-            actualPrefPayouts.set(round.shareClass, actualPayout);
-            remainingForPrefAnalysis = Math.max(0, remainingForPrefAnalysis - prefClaim);
+    // Pre-calculate total claims for Pari Passu
+    let totalGlobalPreferenceClaim = 0;
+    preferences.forEach(p => {
+        const r = capTable.rounds.find(rd => rd.id === p.roundId);
+        if (r) {
+            let roundClaim = 0;
+            r.investments.forEach(inv => roundClaim += inv.amount * p.multiple);
+            totalGlobalPreferenceClaim += roundClaim;
         }
     });
 
+    if (config.payoutStructure === 'common-only') {
+        remainingForAnalysis = effectiveProceeds;
+    } else if (config.payoutStructure === 'pari-passu') {
+        const totalPrefDistributed = Math.min(effectiveProceeds, totalGlobalPreferenceClaim);
+        const globalRatio = totalGlobalPreferenceClaim > 0 ? totalPrefDistributed / totalGlobalPreferenceClaim : 0;
+
+        preferences.forEach(p => {
+            const r = capTable.rounds.find(rd => rd.id === p.roundId);
+            if (r) {
+                let classClaim = 0;
+                r.investments.forEach(inv => classClaim += inv.amount * p.multiple);
+                actualPrefPayouts.set(r.shareClass, classClaim * globalRatio);
+            }
+        });
+        remainingForAnalysis = Math.max(0, effectiveProceeds - totalPrefDistributed);
+    } else {
+        // STANDARD (Stacked / LIFO)
+        sortedPrefsForAnalysis.forEach(pref => {
+            const round = capTable.rounds.find(r => r.id === pref.roundId);
+            if (round && remainingForAnalysis > 0) {
+                let roundClaim = 0;
+                round.investments.forEach(inv => {
+                    roundClaim += inv.amount * pref.multiple;
+                });
+                const actualPayout = Math.min(roundClaim, remainingForAnalysis);
+                actualPrefPayouts.set(round.shareClass, actualPayout);
+                remainingForAnalysis = Math.max(0, remainingForAnalysis - actualPayout);
+            } else if (round) {
+                actualPrefPayouts.set(round.shareClass, 0);
+            }
+        });
+    }
+
+    // Now decide on conversion based on predicted payouts
     preferences.forEach(pref => {
         const round = capTable.rounds.find(r => r.id === pref.roundId);
         if (round) {
@@ -147,46 +178,37 @@ export const calculateWaterfall = (
                 classShares += s.sharesByClass[round.shareClass] || 0;
             });
 
-            // 1. Preference Value (theoretical claim)
-            let prefClaim = 0;
-            round.investments.forEach(inv => {
-                prefClaim += inv.amount * pref.multiple;
-            });
-
-            // Get actual payout considering seniority
-            const actualPrefPayout = actualPrefPayouts.get(round.shareClass) || 0;
-
-            // 2. Conversion Value
-            const conversionValue = calculateAsConvertedValue(classShares);
+            const predictedPrefPayout = actualPrefPayouts.get(round.shareClass) || 0;
+            const conversionValue = (classShares / totalFullyDilutedShares) * effectiveProceeds;
 
             let decision: 'Keep Preference' | 'Convert to Ordinary' = 'Keep Preference';
             let reason = '';
 
-            if (pref.type === 'Non-Participating') {
-                // Compare ACTUAL preference payout (not claim) with conversion value
-                if (conversionValue > actualPrefPayout) {
+            if (config.payoutStructure === 'common-only') {
+                decision = 'Convert to Ordinary';
+                reason = 'Common-only mode';
+                convertedClasses.add(round.shareClass);
+            } else if (pref.type === 'Non-Participating') {
+                if (conversionValue > predictedPrefPayout + 0.01) { // 0.01 epsilon
                     decision = 'Convert to Ordinary';
-                    reason = `Conversion (${Math.round(conversionValue).toLocaleString()}€) > Preference (${Math.round(actualPrefPayout).toLocaleString()}€)`;
+                    reason = `Conversion (${Math.round(conversionValue).toLocaleString()}€) > Preference (${Math.round(predictedPrefPayout).toLocaleString()}€)`;
                     convertedClasses.add(round.shareClass);
                 } else {
                     decision = 'Keep Preference';
-                    reason = `Preference (${Math.round(actualPrefPayout).toLocaleString()}€) > Conversion (${Math.round(conversionValue).toLocaleString()}€)`;
+                    reason = `Preference (${Math.round(predictedPrefPayout).toLocaleString()}€) >= Conversion (${Math.round(conversionValue).toLocaleString()}€)`;
                     nonParticipatingClasses.add(round.shareClass);
                     effectivePreferences.push(pref);
                 }
             } else {
                 decision = 'Keep Preference';
-                reason = 'Participating Preferred (Double Dip)';
+                reason = 'Participating Preferred';
                 effectivePreferences.push(pref);
             }
 
-            // For Participating Preferred, the theoretical value is Pref + Participation on REMAINING proceeds
-            // We calculate participation based on what's left after all preferences are paid (conservative estimate)
-            const estimatedParticipation = (classShares / totalFullyDilutedShares) * remainingForPrefAnalysis;
-
+            const estimatedParticipation = (classShares / totalFullyDilutedShares) * remainingForAnalysis;
             const estimatedTotalValue = pref.type === 'Participating'
-                ? actualPrefPayout + estimatedParticipation
-                : actualPrefPayout;
+                ? predictedPrefPayout + estimatedParticipation
+                : predictedPrefPayout;
 
             conversionAnalysis.push({
                 shareClass: round.shareClass,
@@ -199,7 +221,7 @@ export const calculateWaterfall = (
         }
     });
 
-    // Calculate total participating shares
+    // Final total participating shares based on decisions
     let totalParticipatingShares = 0;
     summary.forEach(s => {
         Object.entries(s.sharesByClass).forEach(([className, shares]) => {
@@ -282,30 +304,19 @@ export const calculateWaterfall = (
     }
 
     // STEP 2+: Liquidation Preferences
-    const sortedPrefs = [...effectivePreferences].sort((a, b) => a.seniority - b.seniority);
+    const sortedPrefs = config.payoutStructure === 'common-only' ? [] : [...effectivePreferences].sort((a, b) => a.seniority - b.seniority);
     const participatedClasses = new Set<string>();
 
     if (config.payoutStructure === 'pari-passu') {
-        const prefsBySeniority = new Map<number, typeof sortedPrefs>();
-        sortedPrefs.forEach(pref => {
-            if (!prefsBySeniority.has(pref.seniority)) {
-                prefsBySeniority.set(pref.seniority, []);
-            }
-            prefsBySeniority.get(pref.seniority)!.push(pref);
-        });
-
-        const seniorityLevels = Array.from(prefsBySeniority.keys()).sort((a, b) => a - b);
-
-        for (const seniority of seniorityLevels) {
-            if (remainingProceeds <= 0) break;
-
-            const prefsAtLevel = prefsBySeniority.get(seniority)!;
+        // In Pari Passu mode, ALL liquidation preferences share proceeds proportionally,
+        // effectively ignoring seniority level differences.
+        if (remainingProceeds > 0 && sortedPrefs.length > 0) {
             stepNumber++;
 
-            let totalClaimsAtLevel = 0;
-            const allClaims: { shareholderId: string, claim: number, shareClass: string, roundName: string }[] = [];
+            let totalClaimsAcrossAllLevels = 0;
+            const allClaims: { shareholderId: string, claim: number, shareClass: string, roundName: string, type: string, cap?: number }[] = [];
 
-            prefsAtLevel.forEach(pref => {
+            sortedPrefs.forEach(pref => {
                 const round = capTable.rounds.find(r => r.id === pref.roundId);
                 if (!round) return;
 
@@ -315,20 +326,24 @@ export const calculateWaterfall = (
                         shareholderId: inv.shareholderId,
                         claim,
                         shareClass: round.shareClass,
-                        roundName: round.name
+                        roundName: round.name,
+                        type: pref.type,
+                        cap: pref.cap
                     });
-                    totalClaimsAtLevel += claim;
+                    totalClaimsAcrossAllLevels += claim;
                 });
             });
 
-            const paidAmount = Math.min(remainingProceeds, totalClaimsAtLevel);
-            const ratio = totalClaimsAtLevel > 0 ? paidAmount / totalClaimsAtLevel : 0;
+            const totalPreferencePaid = Math.min(remainingProceeds, totalClaimsAcrossAllLevels);
+            const ratio = totalClaimsAcrossAllLevels > 0 ? totalPreferencePaid / totalClaimsAcrossAllLevels : 0;
 
+            // Distribute preference payouts
             allClaims.forEach(c => {
                 const p = payouts.get(c.shareholderId);
                 if (p) p.preferencePayout += c.claim * ratio;
             });
 
+            // Add steps for each class
             const byClass = new Map<string, number>();
             allClaims.forEach(c => {
                 byClass.set(c.shareClass, (byClass.get(c.shareClass) || 0) + (c.claim * ratio));
@@ -357,7 +372,7 @@ export const calculateWaterfall = (
                 });
 
                 const representativeRound = capTable.rounds.find(r => r.shareClass === className);
-                const pref = prefsAtLevel.find(p => {
+                const pref = sortedPrefs.find(p => {
                     const r = capTable.rounds.find(rd => rd.id === p.roundId);
                     return r?.shareClass === className;
                 });
@@ -368,7 +383,7 @@ export const calculateWaterfall = (
                     description: `${className} Shares`,
                     shareClass: className,
                     amount: classAmount,
-                    remainingBalance: remainingProceeds - paidAmount,
+                    remainingBalance: remainingProceeds - totalPreferencePaid,
                     details: {
                         shareholders: classShareholders,
                         calculation: {
@@ -386,16 +401,24 @@ export const calculateWaterfall = (
             steps.push({
                 stepNumber,
                 stepName: `${stepNumber}/ Liqu Pref (Pari Passu)`,
-                description: `Total seniority ${seniority}`,
-                amount: paidAmount,
-                remainingBalance: remainingProceeds - paidAmount,
+                description: `Total Pari Passu Allocation`,
+                amount: totalPreferencePaid,
+                remainingBalance: remainingProceeds - totalPreferencePaid,
                 isTotal: true
             });
 
-            remainingProceeds -= paidAmount;
+            remainingProceeds -= totalPreferencePaid;
+
+            // Handle Double Dip for Participating Preferreds in Pari Passu mode
+            // We need to track which classes have participation rights
+            sortedPrefs.forEach(pref => {
+                if (pref.type === 'Participating') {
+                    participatedClasses.add(capTable.rounds.find(r => r.id === pref.roundId)?.shareClass || '');
+                }
+            });
         }
     } else {
-        // STANDARD MODE
+        // STANDARD MODE (Stacked Seniorsity)
         for (const pref of sortedPrefs) {
             const round = capTable.rounds.find(r => r.id === pref.roundId);
             if (!round || remainingProceeds <= 0) continue;
@@ -713,6 +736,7 @@ export const calculateWaterfall = (
     return {
         steps,
         payouts: results,
-        conversionAnalysis
+        conversionAnalysis,
+        effectiveProceeds
     };
 };
