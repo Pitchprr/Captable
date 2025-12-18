@@ -1,22 +1,7 @@
 import ExcelJS from 'exceljs';
 import type { CapTable, WaterfallResult } from '../engine/types';
 
-// Native save helper to avoid file-saver dependency issues
-const saveAs = (blob: Blob, filename: string) => {
-    const url = window.URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = filename;
-    a.style.display = 'none'; // Ensure it's not visible
-    document.body.appendChild(a);
-    a.click();
-
-    // Crucial: wait for browser to start download before revoking/removing
-    setTimeout(() => {
-        window.URL.revokeObjectURL(url);
-        document.body.removeChild(a);
-    }, 200);
-};
+import { saveAs } from 'file-saver';
 
 interface MnaExcelExportOptions {
     companyName: string;
@@ -76,7 +61,9 @@ export async function generateMAndAExcel(options: MnaExcelExportOptions) {
 
     // Trigger download
     const blob = new Blob([buffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
-    const filename = `${options.companyName.replace(/[^a-z0-9]/gi, '_')}_Captable_Export_${new Date().toISOString().split('T')[0]}.xlsx`;
+    const safeCompanyName = (options.companyName || 'Captable').replace(/[^a-z0-9]/gi, '_');
+    const dateStr = new Date().toISOString().split('T')[0];
+    const filename = `${safeCompanyName}_Export_${dateStr}.xlsx`;
     saveAs(blob, filename);
 }
 
