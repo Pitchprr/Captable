@@ -431,43 +431,57 @@ export function GeneralParams({ params, onChange }: GeneralParamsProps) {
             </div>
 
             {/* Summary Box */}
-            <div className="bg-gradient-to-br from-slate-50 to-slate-100 border-2 border-slate-200 rounded-xl p-6 space-y-3">
-                <h4 className="text-lg font-bold text-slate-800 mb-4">Récapitulatif</h4>
+            <div className="bg-gradient-to-br from-slate-50 to-slate-100 border-2 border-slate-200 rounded-xl p-6 space-y-3 shadow-inner">
+                <h4 className="text-lg font-bold text-slate-800 mb-4 border-b border-slate-200 pb-2">Récapitulatif de la Transaction</h4>
 
-                <div className="grid grid-cols-2 gap-4">
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                     <div>
-                        <p className="text-xs text-slate-500 uppercase tracking-wide mb-1">Enterprise Value</p>
-                        <p className="text-2xl font-bold text-slate-900">
+                        <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1">Valeur d'Entreprise (EV)</p>
+                        <p className="text-3xl font-black text-slate-900">
                             {formatCurrency(params.enterpriseValue)} {CURRENCY_SYMBOLS[params.currency]}
                         </p>
                     </div>
 
                     <div>
-                        <p className="text-xs text-slate-500 uppercase tracking-wide mb-1">Période</p>
-                        <p className="text-sm font-semibold text-slate-700">
-                            {params.closingDate ? new Date(params.closingDate).toLocaleDateString('fr-FR') : '—'}
-                            {' → '}
-                            {params.endDate ? new Date(params.endDate).toLocaleDateString('fr-FR') : '—'}
-                        </p>
-                        <p className="text-xs text-slate-500 mt-1">{params.duration} mois</p>
+                        <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1">Période de l'Earn-out</p>
+                        <div className="flex items-center gap-2">
+                            <p className="text-sm font-bold text-slate-700">
+                                {params.closingDate ? new Date(params.closingDate).toLocaleDateString('fr-FR') : '—'}
+                                <span className="mx-2 text-slate-400">→</span>
+                                {params.endDate ? new Date(params.endDate).toLocaleDateString('fr-FR') : '—'}
+                            </p>
+                            <span className="px-2 py-0.5 rounded-full bg-slate-200 text-slate-600 text-[10px] font-bold">
+                                {params.duration} mois
+                            </span>
+                        </div>
                     </div>
                 </div>
 
-                <div className="grid grid-cols-2 gap-4 pt-3 border-t border-slate-300">
-                    <div className="bg-white rounded-lg p-4 border border-blue-200">
-                        <p className="text-xs text-blue-600 uppercase tracking-wide mb-1 font-semibold">Upfront Payment</p>
-                        <p className="text-xl font-bold text-blue-700">
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4 pt-4 border-t border-slate-200">
+                    <div className="bg-white rounded-xl p-4 border border-blue-100 shadow-sm transition-all hover:shadow-md">
+                        <p className="text-[10px] font-bold text-blue-500 uppercase tracking-widest mb-1">Paiement Initial (Upfront)</p>
+                        <p className="text-2xl font-black text-blue-700">
                             {formatCurrency(params.upfrontPayment)} {CURRENCY_SYMBOLS[params.currency]}
                         </p>
-                        <p className="text-sm text-blue-600 mt-1">{upfrontPercent.toFixed(2)}%</p>
+                        <div className="mt-1 flex items-center gap-2">
+                            <div className="flex-1 h-1.5 bg-blue-50 rounded-full overflow-hidden">
+                                <div className="h-full bg-blue-500 rounded-full" style={{ width: `${upfrontPercent}%` }} />
+                            </div>
+                            <span className="text-xs font-bold text-blue-600">{upfrontPercent.toFixed(1)}%</span>
+                        </div>
                     </div>
 
-                    <div className="bg-white rounded-lg p-4 border border-purple-200">
-                        <p className="text-xs text-purple-600 uppercase tracking-wide mb-1 font-semibold">Earn-out Maximum</p>
-                        <p className="text-xl font-bold text-purple-700">
+                    <div className="bg-white rounded-xl p-4 border border-purple-100 shadow-sm transition-all hover:shadow-md">
+                        <p className="text-[10px] font-bold text-purple-500 uppercase tracking-widest mb-1">Earn-out Maximum</p>
+                        <p className="text-2xl font-black text-purple-700">
                             {formatCurrency(params.earnoutMax)} {CURRENCY_SYMBOLS[params.currency]}
                         </p>
-                        <p className="text-sm text-purple-600 mt-1">{earnoutPercent.toFixed(2)}%</p>
+                        <div className="mt-1 flex items-center gap-2">
+                            <div className="flex-1 h-1.5 bg-purple-50 rounded-full overflow-hidden">
+                                <div className="h-full bg-purple-500 rounded-full" style={{ width: `${earnoutPercent}%` }} />
+                            </div>
+                            <span className="text-xs font-bold text-purple-600">{earnoutPercent.toFixed(1)}%</span>
+                        </div>
                     </div>
                 </div>
             </div>

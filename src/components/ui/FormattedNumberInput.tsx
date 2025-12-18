@@ -53,8 +53,8 @@ export function FormattedNumberInput({
         setIsFocused(true);
         // Select all text on focus
         e.target.select();
-        // Show raw number when focused
-        setDisplayValue(value.toString());
+        // Show raw number when focused (rounded to 2 decimals to avoid floating point noise)
+        setDisplayValue(Number(value.toFixed(2)).toString());
     };
 
     const handleBlur = () => {
