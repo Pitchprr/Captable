@@ -7,9 +7,10 @@ import { formatCurrency } from '../../utils';
 // unused imports removed
 import { FormattedNumberInput } from '../ui/FormattedNumberInput';
 import { PreferenceConfig } from './PreferenceConfig';
-import { WATERFALL_COLORS } from '../../theme';
 import { SensitivityDashboard } from './SensitivityDashboard';
 import { MultiExitComparison } from './MultiExitComparison';
+import { ExcelExportModal } from '../ExcelExportModal';
+import { Download } from 'lucide-react';
 
 interface WaterfallViewProps {
     capTable: CapTable;
@@ -45,6 +46,7 @@ export const WaterfallView: React.FC<WaterfallViewProps> = ({
     const [payoutStructure] = useState<PayoutStructure>('standard');
     const [expandedStepIndex, setExpandedStepIndex] = useState<number | null>(null);
     const [isCarveOutActive, setIsCarveOutActive] = useState(carveOutPercent > 0);
+    const [isExportModalOpen, setIsExportModalOpen] = useState(false);
 
     // M&A Enhancement States (Setters unused but state kept for config object)
 
@@ -437,6 +439,13 @@ export const WaterfallView: React.FC<WaterfallViewProps> = ({
                                 </span>
                             )}
                         </div>
+                        <button
+                            onClick={() => setIsExportModalOpen(true)}
+                            className="flex items-center gap-2 px-3 py-1.5 bg-white border border-slate-200 text-slate-600 rounded-lg hover:bg-slate-50 hover:text-slate-900 transition-colors text-sm font-medium shadow-sm"
+                        >
+                            <Download className="w-4 h-4" />
+                            Export Excel
+                        </button>
                     </div>
 
                     {/* SENSITIVITY VIEW */}
@@ -846,6 +855,15 @@ export const WaterfallView: React.FC<WaterfallViewProps> = ({
                     )}
                 </div>
             </div>
+            <ExcelExportModal
+                isOpen={isExportModalOpen}
+                onClose={() => setIsExportModalOpen(false)}
+                capTable={capTable}
+                exitValuation={exitValuation}
+                preferences={preferences}
+                carveOutPercent={carveOutPercent}
+                carveOutBeneficiary={carveOutBeneficiary}
+            />
         </div>
     );
 };

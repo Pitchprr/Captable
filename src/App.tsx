@@ -8,8 +8,9 @@ import { FounderSetup } from './components/captable/FounderSetup';
 import { WaterfallView } from './components/waterfall/WaterfallView';
 import { ConfirmationModal } from './components/ui/ConfirmationModal';
 import { LocaleSelector } from './components/ui/LocaleSelector';
-import { exportToExcel } from './engine/ExcelExport';
 import { setLocaleConfig, type Locale } from './utils';
+import { ExcelExportModal } from './components/ExcelExportModal';
+import { calculateWaterfall } from './engine/WaterfallEngine';
 import { useCapTablePersistence } from './hooks/useCapTablePersistence';
 
 // App state for undo/redo history
@@ -219,6 +220,7 @@ function App() {
   const { postMoneyValuation, summary: capTableSummary } = capTableState;
 
   const [isResetModalOpen, setIsResetModalOpen] = useState(false);
+  const [isExportModalOpen, setIsExportModalOpen] = useState(false);
   const [shareUrlCopied, setShareUrlCopied] = useState(false);
   const [isLoadingFromPersistence, setIsLoadingFromPersistence] = useState(true);
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
@@ -383,17 +385,8 @@ function App() {
     }
   }, [exitValuation, earnoutConfig.enabled, isLoadingFromPersistence]);
 
-  const handleExport = async () => {
-    try {
-      await exportToExcel(capTable, exitValuation, preferences, {
-        carveOutPercent,
-        carveOutBeneficiary,
-        payoutStructure: 'standard' // This could be made dynamic in future
-      });
-    } catch (error) {
-      console.error("Export failed:", error);
-      alert("Export failed! Please check the console for details.");
-    }
+  const handleExport = () => {
+    setIsExportModalOpen(true);
   };
 
   const handleReset = () => {
@@ -814,6 +807,16 @@ function App() {
           </div>
         </div>
       </main>
+      <ExcelExportModal
+        isOpen={isExportModalOpen}
+        onClose={() => setIsExportModalOpen(false)}
+        capTable={capTable}
+        exitValuation={exitValuation}
+        preferences={preferences}
+        carveOutPercent={carveOutPercent}
+        carveOutBeneficiary={carveOutBeneficiary}
+        companyName={capTable.startupName}
+      />
     </div>
   );
 }
