@@ -31,8 +31,20 @@ export function FormattedNumberInput({
     }
 
     function parseFormattedNumber(str: string): number {
-        // Remove all spaces and replace comma with dot
-        const cleaned = str.replace(/\s/g, '').replace(',', '.');
+        if (!str) return 0;
+
+        // Remove all whitespace (including NBSP, NNBSP)
+        // More robust: remove EVERYTHING that is not a digit, comma or dot
+        const cleaned = str.replace(/[^\d.,]/g, '').replace(',', '.');
+
+        // If multiple dots remain, only keep the first one
+        const parts = cleaned.split('.');
+        if (parts.length > 2) {
+            const finalCleaned = parts[0] + '.' + parts.slice(1).join('');
+            const parsed = parseFloat(finalCleaned);
+            return isNaN(parsed) ? 0 : parsed;
+        }
+
         const parsed = parseFloat(cleaned);
         return isNaN(parsed) ? 0 : parsed;
     }

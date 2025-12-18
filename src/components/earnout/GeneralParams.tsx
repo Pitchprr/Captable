@@ -106,14 +106,20 @@ export function GeneralParams({ params, onChange }: GeneralParamsProps) {
         let newUpfront = params.upfrontPayment;
         let newEarnout = params.earnoutMax;
 
-        if (params.upfrontMode === 'percent') {
-            const upfrontPercent = (params.upfrontPayment / params.enterpriseValue) * 100;
-            newUpfront = (upfrontPercent / 100) * value;
-            newEarnout = value - newUpfront;
-        } else if (params.earnoutMode === 'percent') {
-            const earnoutPercent = (params.earnoutMax / params.enterpriseValue) * 100;
-            newEarnout = (earnoutPercent / 100) * value;
-            newUpfront = value - newEarnout;
+        if (params.enterpriseValue > 0) {
+            if (params.upfrontMode === 'percent') {
+                const upfrontPercent = (params.upfrontPayment / params.enterpriseValue) * 100;
+                newUpfront = (upfrontPercent / 100) * value;
+                newEarnout = value - newUpfront;
+            } else if (params.earnoutMode === 'percent') {
+                const earnoutPercent = (params.earnoutMax / params.enterpriseValue) * 100;
+                newEarnout = (earnoutPercent / 100) * value;
+                newUpfront = value - newEarnout;
+            }
+        } else {
+            // If previous EV was 0, just use defaults or keep as is
+            newUpfront = value * 0.7; // Default 70% if we have no prior info
+            newEarnout = value * 0.3; // Default 30%
         }
 
         onChange({
@@ -320,8 +326,8 @@ export function GeneralParams({ params, onChange }: GeneralParamsProps) {
                 </label>
                 <div className="flex gap-4">
                     <label className={`flex-1 flex items-center gap-3 p-3 rounded-lg border-2 cursor-pointer transition-all ${params.beneficiaryScope === 'all'
-                            ? 'border-blue-500 bg-blue-50'
-                            : 'border-slate-200 hover:border-slate-300'
+                        ? 'border-blue-500 bg-blue-50'
+                        : 'border-slate-200 hover:border-slate-300'
                         }`}>
                         <input
                             type="radio"
@@ -338,8 +344,8 @@ export function GeneralParams({ params, onChange }: GeneralParamsProps) {
                     </label>
 
                     <label className={`flex-1 flex items-center gap-3 p-3 rounded-lg border-2 cursor-pointer transition-all ${params.beneficiaryScope === 'founders-only'
-                            ? 'border-blue-500 bg-blue-50'
-                            : 'border-slate-200 hover:border-slate-300'
+                        ? 'border-blue-500 bg-blue-50'
+                        : 'border-slate-200 hover:border-slate-300'
                         }`}>
                         <input
                             type="radio"

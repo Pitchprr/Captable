@@ -351,39 +351,43 @@ function App() {
     }
   }, [preferences]); // Only depend on preferences, not rounds to avoid loop
 
-  // Sync exitValuation with earn-out EV when earn-out is enabled
+  // 1. Sync Earn-out EV -> global exitValuation (when in Earn-out tab)
   useEffect(() => {
     if (isLoadingFromPersistence) return;
+    if (activeTab !== 'earnout') return; // Only Earn-out tab can push its EV to the global state
 
     if (earnoutConfig.enabled && earnoutConfig.generalParams.enterpriseValue > 0) {
-      // If earn-out is enabled, sync exitValuation with EV
-      if (exitValuation !== earnoutConfig.generalParams.enterpriseValue) {
+      if (Math.abs(exitValuation - earnoutConfig.generalParams.enterpriseValue) > 1) {
         setExitValuation(earnoutConfig.generalParams.enterpriseValue);
       }
     }
-  }, [earnoutConfig.enabled, earnoutConfig.generalParams.enterpriseValue, isLoadingFromPersistence]);
+  }, [activeTab, earnoutConfig.enabled, earnoutConfig.generalParams.enterpriseValue, isLoadingFromPersistence]);
 
-  // Also sync EV when exitValuation changes (bidirectional sync)
+  // 2. Sync global exitValuation -> Earn-out EV (when NOT in Earn-out tab)
   useEffect(() => {
     if (isLoadingFromPersistence) return;
+    if (activeTab === 'earnout') return; // Prevent global exitValuation from overriding Earn-out while user is typing there
 
     if (earnoutConfig.enabled && exitValuation > 0) {
-      // If exitValuation changes and earn-out is enabled, update EV and recalculate amounts proportionally
-      if (exitValuation !== earnoutConfig.generalParams.enterpriseValue && earnoutConfig.generalParams.enterpriseValue > 0) {
-        const ratio = exitValuation / earnoutConfig.generalParams.enterpriseValue;
-        setEarnoutConfig(prev => ({
-          ...prev,
-          generalParams: {
-            ...prev.generalParams,
-            enterpriseValue: exitValuation,
-            // Always recalculate proportionally to maintain the same split ratio
-            upfrontPayment: Math.round(prev.generalParams.upfrontPayment * ratio),
-            earnoutMax: Math.round(prev.generalParams.earnoutMax * ratio)
-          }
-        }));
+      const currentEV = earnoutConfig.generalParams.enterpriseValue;
+      if (Math.abs(exitValuation - currentEV) > 1 && currentEV > 0) {
+        const ratio = exitValuation / currentEV;
+        
+        // Safeguard: only sync if EV is sane and ratio isn't extreme
+        if (currentEV > 1000 && ratio > 0.01 && ratio < 100) {
+          setEarnoutConfig(prev => ({
+            ...prev,
+            generalParams: {
+              ...prev.generalParams,
+              enterpriseValue: exitValuation,
+              upfrontPayment: Math.round(prev.generalParams.upfrontPayment * ratio),
+              earnoutMax: Math.round(prev.generalParams.earnoutMax * ratio)
+            }
+          }));
+        }
       }
     }
-  }, [exitValuation, earnoutConfig.enabled, isLoadingFromPersistence]);
+  }, [activeTab, exitValuation, earnoutConfig.enabled, isLoadingFromPersistence]);
 
   const handleExport = () => {
     setIsExportModalOpen(true);
