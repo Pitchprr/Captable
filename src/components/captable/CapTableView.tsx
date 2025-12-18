@@ -13,7 +13,29 @@ interface CapTableViewProps {
 }
 
 export const CapTableView: React.FC<CapTableViewProps> = ({ capTable, setCapTable }) => {
-    const { summary, totalSharesOutstanding, totalSharesNonDiluted, postMoneyValuation } = calculateCapTableState(capTable);
+    const [viewUpToRoundId, setViewUpToRoundId] = React.useState<string>('latest');
+
+    // 0. Compute the effective CapTable for the current view
+    const effectiveCapTable = React.useMemo(() => {
+        if (viewUpToRoundId === 'latest') return capTable;
+        const roundIndex = capTable.rounds.findIndex(r => r.id === viewUpToRoundId);
+        if (roundIndex === -1) return capTable;
+        const filteredRounds = capTable.rounds.slice(0, roundIndex + 1);
+        const roundIds = new Set(filteredRounds.map(r => r.id));
+        return {
+            ...capTable,
+            rounds: filteredRounds,
+            optionGrants: capTable.optionGrants.filter(g => roundIds.has(g.roundId))
+        };
+    }, [capTable, viewUpToRoundId]);
+
+    const { summary: fullSummary, totalSharesOutstanding, totalSharesNonDiluted, postMoneyValuation } = calculateCapTableState(effectiveCapTable);
+
+    // Filter summary to only show shareholders who have SOME interest at this point
+    const summary = React.useMemo(() =>
+        fullSummary.filter(s => s.totalShares > 0 || s.totalOptions > 0),
+        [fullSummary]
+    );
 
     const updateShareholders = (shareholders: Shareholder[]) => {
         setCapTable(prev => ({ ...prev, shareholders }));
@@ -28,17 +50,17 @@ export const CapTableView: React.FC<CapTableViewProps> = ({ capTable, setCapTabl
     };
 
     // 1. Get all unique share classes (sorted by round order)
-    const shareClasses = Array.from(new Set(capTable.rounds.map(r => r.shareClass)));
+    const shareClasses = Array.from(new Set(effectiveCapTable.rounds.map(r => r.shareClass)));
 
     // 2. Get all rounds that have a pool
-    const poolRounds = capTable.rounds.filter(r => (r.calculatedPoolShares || 0) > 0);
+    const poolRounds = effectiveCapTable.rounds.filter(r => (r.calculatedPoolShares || 0) > 0);
 
     // 3. Calculate Unallocated Options per pool
     const unallocatedByPool: Record<string, number> = {};
     let totalUnallocated = 0;
     poolRounds.forEach(r => {
         const totalPool = r.calculatedPoolShares || 0;
-        const granted = capTable.optionGrants
+        const granted = effectiveCapTable.optionGrants
             .filter(g => g.roundId === r.id)
             .reduce((sum, g) => sum + g.shares, 0);
         const unallocated = Math.max(0, totalPool - granted);
@@ -57,7 +79,7 @@ export const CapTableView: React.FC<CapTableViewProps> = ({ capTable, setCapTabl
         groupedByRole.set(item.role, list);
     });
 
-    const convertibleRounds = capTable.rounds.filter(r => r.investmentType && r.investmentType !== 'Equity');
+    const convertibleRounds = effectiveCapTable.rounds.filter(r => r.investmentType && r.investmentType !== 'Equity');
 
     const [isShareholdersCollapsed, setIsShareholdersCollapsed] = React.useState(false);
     const [isOptionPoolsCollapsed, setIsOptionPoolsCollapsed] = React.useState(false);
@@ -109,10 +131,35 @@ export const CapTableView: React.FC<CapTableViewProps> = ({ capTable, setCapTabl
             </div>
 
             <div className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
-                <div className="px-6 py-4 border-b border-slate-200 bg-slate-50 flex justify-between items-center">
-                    <h3 className="text-lg font-semibold text-slate-800">Cap Table Summary</h3>
-                    <div className="text-sm text-slate-500">
-                        Post-Money Valuation: <span className="font-bold text-slate-900">{formatCurrency(postMoneyValuation)}</span>
+                <div className="px-6 py-4 border-b border-slate-200 bg-slate-50 flex flex-col md:flex-row md:items-center justify-between gap-4">
+                    <div className="flex items-center gap-4">
+                        <h3 className="text-lg font-semibold text-slate-800">Cap Table Summary</h3>
+
+                        {/* Round Selector (Evolution) */}
+                        <div className="flex items-center gap-2 bg-white border border-slate-200 rounded-lg px-2 py-1 shadow-sm">
+                            <span className="text-[10px] font-bold text-slate-400 uppercase tracking-tight ml-1">View Round:</span>
+                            <select
+                                value={viewUpToRoundId}
+                                onChange={(e) => setViewUpToRoundId(e.target.value)}
+                                className="text-xs font-bold text-blue-600 bg-transparent border-none focus:ring-0 cursor-pointer pr-8"
+                            >
+                                <option value="latest">Latest (Auto)</option>
+                                {capTable.rounds.map((r, idx) => (
+                                    <option key={r.id} value={r.id}>
+                                        {idx + 1}. {r.name}
+                                    </option>
+                                ))}
+                            </select>
+                        </div>
+                    </div>
+
+                    <div className="flex items-center gap-6">
+                        <div className="text-sm text-slate-500">
+                            Shares: <span className="font-bold text-slate-900">{formatNumber(totalSharesOutstanding)}</span>
+                        </div>
+                        <div className="text-sm text-slate-500">
+                            Post-Money: <span className="font-bold text-slate-900">{formatCurrency(postMoneyValuation)}</span>
+                        </div>
                     </div>
                 </div>
                 <div className="overflow-x-auto">
@@ -286,7 +333,7 @@ export const CapTableView: React.FC<CapTableViewProps> = ({ capTable, setCapTabl
             </div>
 
             {/* Cap Table Charts */}
-            <CapTableCharts capTable={capTable} />
+            <CapTableCharts capTable={effectiveCapTable} />
 
             {/* Convertible Instruments Summary */}
             {convertibleRounds.length > 0 && (

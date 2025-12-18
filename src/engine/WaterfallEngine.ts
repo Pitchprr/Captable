@@ -140,14 +140,28 @@ export const calculateWaterfall = (
         remainingForAnalysis = effectiveProceeds;
     } else if (config.payoutStructure === 'pari-passu') {
         const totalPrefDistributed = Math.min(effectiveProceeds, totalGlobalPreferenceClaim);
-        const globalRatio = totalGlobalPreferenceClaim > 0 ? totalPrefDistributed / totalGlobalPreferenceClaim : 0;
+
+        // Calculate total shares for all classes with preferences to do a 'Base 100 on equity' among investors
+        let totalInvestorShares = 0;
+        const classSharesMap = new Map<string, number>();
 
         preferences.forEach(p => {
             const r = capTable.rounds.find(rd => rd.id === p.roundId);
             if (r) {
-                let classClaim = 0;
-                r.investments.forEach(inv => classClaim += inv.amount * p.multiple);
-                actualPrefPayouts.set(r.shareClass, classClaim * globalRatio);
+                let classShares = 0;
+                summary.forEach(s => classShares += s.sharesByClass[r.shareClass] || 0);
+                classSharesMap.set(r.shareClass, classShares);
+                totalInvestorShares += classShares;
+            }
+        });
+
+        preferences.forEach(p => {
+            const r = capTable.rounds.find(rd => rd.id === p.roundId);
+            if (r) {
+                const classShares = classSharesMap.get(r.shareClass) || 0;
+                // Distribute proceeds proportionally to shares (relative equity)
+                const shareOfPool = totalInvestorShares > 0 ? (classShares / totalInvestorShares) : 0;
+                actualPrefPayouts.set(r.shareClass, totalPrefDistributed * shareOfPool);
             }
         });
         remainingForAnalysis = Math.max(0, effectiveProceeds - totalPrefDistributed);
@@ -335,41 +349,62 @@ export const calculateWaterfall = (
             });
 
             const totalPreferencePaid = Math.min(remainingProceeds, totalClaimsAcrossAllLevels);
-            const ratio = totalClaimsAcrossAllLevels > 0 ? totalPreferencePaid / totalClaimsAcrossAllLevels : 0;
 
-            // Distribute preference payouts
-            allClaims.forEach(c => {
-                const p = payouts.get(c.shareholderId);
-                if (p) p.preferencePayout += c.claim * ratio;
+            // Calculate total shares for all participating preferred classes
+            let totalInvestorShares = 0;
+            const classSharesMap = new Map<string, number>();
+            sortedPrefs.forEach(pref => {
+                const r = capTable.rounds.find(rd => rd.id === pref.roundId);
+                if (r) {
+                    let classShares = 0;
+                    summary.forEach(s => classShares += s.sharesByClass[r.shareClass] || 0);
+                    classSharesMap.set(r.shareClass, classShares);
+                    totalInvestorShares += classShares;
+                }
             });
 
-            // Add steps for each class
+            // Distribute based on relative equity
             const byClass = new Map<string, number>();
-            allClaims.forEach(c => {
-                byClass.set(c.shareClass, (byClass.get(c.shareClass) || 0) + (c.claim * ratio));
+            const classShareholdersMap = new Map<string, { id: string, name: string, amount: number }[]>();
+
+            sortedPrefs.forEach(pref => {
+                const r = capTable.rounds.find(rd => rd.id === pref.roundId);
+                if (r) {
+                    const classShares = classSharesMap.get(r.shareClass) || 0;
+                    const shareOfPool = totalInvestorShares > 0 ? (classShares / totalInvestorShares) : 0;
+                    const classAmount = totalPreferencePaid * shareOfPool;
+                    byClass.set(r.shareClass, classAmount);
+
+                    const classRecipients: { id: string, name: string, amount: number }[] = [];
+
+                    // Distribute to individual shareholders in this class
+                    summary.forEach(s => {
+                        const shShares = s.sharesByClass[r.shareClass] || 0;
+                        if (shShares > 0) {
+                            const shShareOfClass = classShares > 0 ? (shShares / classShares) : 0;
+                            const shAmount = classAmount * shShareOfClass;
+
+                            // Add to global payout
+                            const p = payouts.get(s.shareholderId);
+                            if (p) p.preferencePayout += shAmount;
+
+                            // Track for step details
+                            if (shAmount > 0) {
+                                classRecipients.push({
+                                    id: s.shareholderId,
+                                    name: s.shareholderName,
+                                    amount: shAmount
+                                });
+                            }
+                        }
+                    });
+                    classShareholdersMap.set(r.shareClass, classRecipients);
+                }
             });
 
             Array.from(byClass.keys()).sort().reverse().forEach(className => {
                 const classAmount = byClass.get(className)!;
-                const classShareholders: { id: string, name: string, amount: number }[] = [];
-                allClaims.forEach(c => {
-                    if (c.shareClass === className) {
-                        const amount = c.claim * ratio;
-                        if (amount > 0) {
-                            const existing = classShareholders.find(s => s.id === c.shareholderId);
-                            if (existing) {
-                                existing.amount += amount;
-                            } else {
-                                const sName = summary.find(s => s.shareholderId === c.shareholderId)?.shareholderName || 'Unknown';
-                                classShareholders.push({
-                                    id: c.shareholderId,
-                                    name: sName,
-                                    amount: amount
-                                });
-                            }
-                        }
-                    }
-                });
+                const classShareholders = classShareholdersMap.get(className) || [];
 
                 const representativeRound = capTable.rounds.find(r => r.shareClass === className);
                 const pref = sortedPrefs.find(p => {
