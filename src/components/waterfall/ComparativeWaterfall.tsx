@@ -126,7 +126,11 @@ export const ComparativeWaterfall: React.FC<ComparativeWaterfallProps> = ({
                             contentStyle={{ borderRadius: '12px', border: 'none', boxShadow: '0 10px 15px -3px rgba(0, 0, 0, 0.1)' }}
                             formatter={(value: number) => [formatCurrency(value), '']}
                         />
-                        <Legend wrapperStyle={{ paddingTop: '20px' }} />
+                        <Legend
+                            wrapperStyle={{ paddingTop: '20px', fontSize: '10px' }}
+                            iconType="circle"
+                            iconSize={8}
+                        />
 
                         {/* Stacked Bars */}
                         <Bar dataKey="Investors" name="Investors (VCs/Angels)" stackId="a" fill="#3b82f6" radius={[0, 0, 4, 4]} />
