@@ -10,7 +10,6 @@ import { ConfirmationModal } from './components/ui/ConfirmationModal';
 import { LocaleSelector } from './components/ui/LocaleSelector';
 import { setLocaleConfig, type Locale } from './utils';
 import { ExcelExportModal } from './components/ExcelExportModal';
-import { calculateWaterfall } from './engine/WaterfallEngine';
 import { useCapTablePersistence } from './hooks/useCapTablePersistence';
 
 // App state for undo/redo history
@@ -372,7 +371,7 @@ function App() {
       const currentEV = earnoutConfig.generalParams.enterpriseValue;
       if (Math.abs(exitValuation - currentEV) > 1 && currentEV > 0) {
         const ratio = exitValuation / currentEV;
-        
+
         // Safeguard: only sync if EV is sane and ratio isn't extreme
         if (currentEV > 1000 && ratio > 0.01 && ratio < 100) {
           setEarnoutConfig(prev => ({
