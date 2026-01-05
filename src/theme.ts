@@ -67,7 +67,7 @@ export const ROLE_COLORS: Record<string, string> = {
     'Employee': COLORS.info,          // violet
     'Advisor': '#06b6d4',             // cyan
     'Other': COLORS.neutralLight,     // slate
-    'Unallocated Pool': COLORS.warning, // amber for unallocated options
+    'Unallocated Pool': COLORS.neutralLight, // slate-400 for unallocated options
 } as const;
 
 // Gradient colors - For premium UI elements

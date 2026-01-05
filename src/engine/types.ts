@@ -1,4 +1,4 @@
-export type ShareholderRole = 'Founder' | 'Angel' | 'VC' | 'Employee' | 'Advisor' | 'Other';
+export type ShareholderRole = 'Founder' | 'Angel' | 'VC' | 'Employee' | 'Advisor' | 'Other' | 'Unallocated Pool';
 export type InvestmentType = 'Equity' | 'SAFE' | 'ConvertibleNote' | 'BSA_Air';
 
 export interface Shareholder {

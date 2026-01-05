@@ -363,8 +363,8 @@ export const WaterfallView: React.FC<WaterfallViewProps> = ({
                     </div>
 
                     {/* 5. M&A Clause Adjustments - New Look */}
-                    <div className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
-                        <div className="p-4 border-b border-slate-100 flex items-center justify-between bg-slate-50/50">
+                    <div className="bg-white rounded-xl border border-slate-200 shadow-sm">
+                        <div className="p-4 border-b border-slate-100 flex items-center justify-between bg-slate-50/50 rounded-t-xl">
                             <div className="flex items-center gap-2">
                                 <Settings className="w-4 h-4 text-slate-400" />
                                 <h3 className="text-sm font-bold text-slate-800">M&A Adjustments</h3>
@@ -1126,7 +1126,7 @@ export const WaterfallView: React.FC<WaterfallViewProps> = ({
                                                                                 ];
 
                                                                                 return categories.map(cat => {
-                                                                                    const groupAmount = step.details.shareholders.reduce((sum, s) => {
+                                                                                    const groupAmount = step.details!.shareholders.reduce((sum, s) => {
                                                                                         const role = capTable.shareholders.find(sh => sh.name === s.name)?.role;
                                                                                         const isMatch = cat.group === 'Founder' ? role === 'Founder' :
                                                                                             cat.group === 'Team' ? ['Employee', 'Advisor'].includes(role || '') :
