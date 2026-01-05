@@ -181,6 +181,7 @@ export const WaterfallView: React.FC<WaterfallViewProps> = ({
             current.Participation += p.participationPayout;
             current.CarveOut += p.carveOutPayout;
             current.Invested += p.totalInvested;
+            current.equityPercentage += p.equityPercentage;
 
             dataMap.set(groupName, current);
         });
@@ -657,9 +658,21 @@ export const WaterfallView: React.FC<WaterfallViewProps> = ({
                                                                         </div>
                                                                     ))}
                                                                 </div>
-                                                                <div className="mt-3 pt-2 border-t border-slate-100 flex items-center justify-between gap-8">
-                                                                    <span className="text-xs font-bold text-slate-900 uppercase tracking-wider">Total</span>
-                                                                    <span className="text-sm font-mono font-bold text-indigo-600">{formatCurrency(total)}</span>
+                                                                <div className="mt-3 pt-2 border-t border-slate-100 space-y-2">
+                                                                    <div className="flex items-center justify-between gap-8">
+                                                                        <span className="text-xs font-bold text-slate-900 uppercase tracking-wider">Total Payout</span>
+                                                                        <span className="text-sm font-mono font-bold text-indigo-600">{formatCurrency(total)}</span>
+                                                                    </div>
+                                                                    <div className="grid grid-cols-2 gap-4 pt-1">
+                                                                        <div className="flex flex-col">
+                                                                            <span className="text-[10px] font-bold text-slate-400 uppercase tracking-tight">% Equity Held</span>
+                                                                            <span className="text-xs font-bold text-indigo-500">{(payload[0].payload.equityPercentage * 100).toFixed(1)}%</span>
+                                                                        </div>
+                                                                        <div className="flex flex-col text-right">
+                                                                            <span className="text-[10px] font-bold text-slate-400 uppercase tracking-tight">% Proceeds Rec.</span>
+                                                                            <span className="text-xs font-bold text-emerald-500">{((total / (effectiveProceeds || 1)) * 100).toFixed(1)}%</span>
+                                                                        </div>
+                                                                    </div>
                                                                 </div>
                                                             </div>
                                                         );
