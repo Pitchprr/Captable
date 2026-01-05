@@ -77,24 +77,33 @@ export const TornadoChart: React.FC<TornadoChartProps> = ({ data }) => {
                                 if (active && payload && payload.length) {
                                     const data = payload[0].payload as TornadoDataPoint;
                                     return (
-                                        <div className="bg-white p-3 border border-slate-100 shadow-xl rounded-xl text-xs">
-                                            <p className="font-bold text-slate-800 mb-2 border-b border-slate-100 pb-1">{data.name}</p>
-                                            <div className="space-y-1">
-                                                <div className="flex justify-between gap-4 text-slate-500">
-                                                    <span>Base Payout:</span>
-                                                    <span className="font-mono font-medium text-slate-800">{formatCurrency(data.basePayout)}</span>
+                                        <div className="bg-white/90 backdrop-blur-md p-4 border border-slate-200 shadow-2xl rounded-2xl text-[11px] min-w-[220px] z-50">
+                                            <p className="font-bold text-slate-900 mb-3 border-b border-slate-100 pb-2 text-sm">{data.name}</p>
+                                            <div className="space-y-2">
+                                                <div className="flex justify-between gap-4">
+                                                    <span className="text-slate-500">Base Payout:</span>
+                                                    <span className="font-mono font-bold text-slate-900">{formatCurrency(data.basePayout)}</span>
                                                 </div>
-                                                <div className="flex justify-between gap-4 text-red-500">
-                                                    <span>Bear Case:</span>
-                                                    <span className="font-mono font-bold">{formatCurrency(data.bearPayout)} ({formatCurrency(data.downside)})</span>
+                                                <div className="flex justify-between gap-4 py-1.5 px-2 bg-red-50 rounded-lg">
+                                                    <span className="text-red-600 font-medium">Bear Case:</span>
+                                                    <div className="text-right">
+                                                        <div className="font-mono font-bold text-red-700">{formatCurrency(data.bearPayout)}</div>
+                                                        <div className="text-[9px] text-red-500 opacity-80">{formatCurrency(data.downside)}</div>
+                                                    </div>
                                                 </div>
-                                                <div className="flex justify-between gap-4 text-green-600">
-                                                    <span>Bull Case:</span>
-                                                    <span className="font-mono font-bold">{formatCurrency(data.bullPayout)} (+{formatCurrency(data.upside_bull)})</span>
+                                                <div className="flex justify-between gap-4 py-1.5 px-2 bg-emerald-50 rounded-lg">
+                                                    <span className="text-emerald-600 font-medium">Bull Case:</span>
+                                                    <div className="text-right">
+                                                        <div className="font-mono font-bold text-emerald-700">{formatCurrency(data.bullPayout)}</div>
+                                                        <div className="text-[9px] text-emerald-500 opacity-80">+{formatCurrency(data.upside_bull)}</div>
+                                                    </div>
                                                 </div>
-                                                <div className="flex justify-between gap-4 text-purple-600">
-                                                    <span>Stretch:</span>
-                                                    <span className="font-mono font-bold">{formatCurrency(data.stretchPayout)} (+{formatCurrency(data.upside_stretch)})</span>
+                                                <div className="flex justify-between gap-4 py-1.5 px-2 bg-purple-50 rounded-lg">
+                                                    <span className="text-purple-600 font-medium">Stretch:</span>
+                                                    <div className="text-right">
+                                                        <div className="font-mono font-bold text-purple-700">{formatCurrency(data.stretchPayout)}</div>
+                                                        <div className="text-[9px] text-purple-500 opacity-80">+{formatCurrency(data.upside_stretch)}</div>
+                                                    </div>
                                                 </div>
                                             </div>
                                         </div>
