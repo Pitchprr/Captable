@@ -33,7 +33,7 @@ const VOCABULARY = {
             'beneficiary', 'stakeholder', 'participant', 'entity', 'fund',
             // French
             'nom', 'actionnaire', 'investisseur', 'associé', 'porteur', 'détenteur',
-            'bénéficiaire', 'participant', 'entité', 'fonds'
+            'bénéficiaire', 'participant', 'entité', 'fonds', 'associés'
         ],
         // Value patterns that indicate this is a name column
         valuePatterns: [
@@ -65,7 +65,7 @@ const VOCABULARY = {
             'quantity', 'qty', 'nb', 'number', 'count', 'holdings',
             // French
             'actions', 'action', 'titres', 'titre', 'parts', 'part',
-            'participation', 'nombre', 'quantité', 'détention'
+            'participation', 'nombre', 'quantité', 'détention', 'actions ordinaires'
         ],
         // Patterns to detect share columns from values
         valuePatterns: {
@@ -75,7 +75,6 @@ const VOCABULARY = {
                 if (nums.length < 2) return false;
 
                 const parsed = nums.map(v => parseFloat(String(v).replace(/\s/g, '')));
-                // Shares are typically large whole numbers
                 const avgValue = parsed.reduce((a, b) => a + b, 0) / parsed.length;
                 const hasDecimals = parsed.some(v => v % 1 !== 0);
 
@@ -90,8 +89,8 @@ const VOCABULARY = {
             'money', 'funding', 'raised', 'contributed', 'ticket', 'check',
             'commitment', 'subscription',
             // French
-            'investissement', 'montant', 'valeur', 'apport', 'versement',
-            'souscription', 'engagement', 'mise', 'contribution'
+            'investissement', 'investi', 'montant', 'valeur', 'capital',
+            'apport', 'ticket', 'contribution', 'valeur nominale', 'nominal'
         ],
         // Currency symbols and patterns
         currencyPatterns: [
@@ -103,7 +102,7 @@ const VOCABULARY = {
     rounds: {
         // Round name patterns
         patterns: [
-            /\b(seed|amorçage|amorçage)\b/i,
+            /\b(seed|amorçage)\b/i,
             /\b(pre[- ]?seed)\b/i,
             /\b(series|série)\s*[a-z]\d*/i,
             /\b(round|tour|levée)\s*\d*/i,
@@ -129,7 +128,6 @@ const VOCABULARY = {
             for (const pattern of patterns) {
                 const match = header.match(pattern);
                 if (match) {
-                    // Format the round name nicely
                     let name = match[0].trim();
                     name = name.charAt(0).toUpperCase() + name.slice(1).toLowerCase();
                     return name;
@@ -143,11 +141,11 @@ const VOCABULARY = {
 /**
  * Analyze a column's values to determine its likely type
  */
-interface ColumnAnalysis {
+export interface ColumnAnalysis {
     columnIndex: number;
     header: string;
     inferredType: 'name' | 'role' | 'shares' | 'investment' | 'percentage' | 'date' | 'unknown';
-    confidence: number; // 0-100
+    confidence: number;
     roundName?: string;
     reasoning: string[];
 }
@@ -166,46 +164,34 @@ function analyzeColumnValues(header: string, values: any[]): ColumnAnalysis {
 
     const cleanValues = values
         .filter(v => v !== null && v !== undefined && v !== '')
-        .slice(0, 20); // Sample first 20 non-empty values
+        .slice(0, 20);
 
     if (cleanValues.length === 0) {
         return { columnIndex: 0, header, inferredType: 'unknown', confidence: 0, reasoning: ['No data'] };
     }
 
-    // ============================================================
-    // STEP 1: Analyze Header Text
-    // ============================================================
     const headerLower = header.toLowerCase().trim();
 
-    // Check name vocabulary
     if (VOCABULARY.name.headers.some(kw => headerLower.includes(kw))) {
         scores.name += 40;
         reasoning.push(`Header contains name keyword`);
     }
 
-    // Check role vocabulary
     if (VOCABULARY.role.headers.some(kw => headerLower.includes(kw))) {
         scores.role += 50;
         reasoning.push(`Header contains role keyword`);
     }
 
-    // Check shares vocabulary
     if (VOCABULARY.shares.headers.some(kw => headerLower.includes(kw))) {
         scores.shares += 40;
         reasoning.push(`Header contains shares keyword`);
     }
 
-    // Check investment vocabulary
     if (VOCABULARY.investment.headers.some(kw => headerLower.includes(kw))) {
         scores.investment += 40;
         reasoning.push(`Header contains investment keyword`);
     }
 
-    // ============================================================
-    // STEP 2: Analyze Value Patterns
-    // ============================================================
-
-    // Count value types
     let textCount = 0;
     let numberCount = 0;
     let currencyCount = 0;
@@ -215,30 +201,20 @@ function analyzeColumnValues(header: string, values: any[]): ColumnAnalysis {
 
     for (const val of cleanValues) {
         const strVal = String(val).trim();
-
-        // Check if it's a number
         const numVal = parseNumber(strVal);
         if (!isNaN(numVal)) {
             numberCount++;
-
-            // Check for currency patterns
             if (VOCABULARY.investment.currencyPatterns.some(p => p.test(strVal))) {
                 currencyCount++;
             }
-
-            // Check for percentage
             if (strVal.includes('%') || (numVal >= 0 && numVal <= 100 && strVal.length < 6)) {
                 percentCount++;
             }
         } else {
             textCount++;
-
-            // Check if it matches known role values
             if (VOCABULARY.role.knownValues.some(rv => strVal.toLowerCase().includes(rv))) {
                 roleMatchCount++;
             }
-
-            // Check if it matches name patterns
             if (VOCABULARY.name.valuePatterns.some(p => p.test(strVal))) {
                 namePatternCount++;
             }
@@ -248,13 +224,11 @@ function analyzeColumnValues(header: string, values: any[]): ColumnAnalysis {
     const textRatio = textCount / cleanValues.length;
     const numberRatio = numberCount / cleanValues.length;
 
-    // Text-heavy column
     if (textRatio > 0.7) {
         if (roleMatchCount > cleanValues.length * 0.3) {
-            scores.role += 70; // High confidence for role
+            scores.role += 70;
             reasoning.push(`${roleMatchCount} values match known roles`);
         } else if (namePatternCount > 0 || textCount > 2) {
-            // Check for VC/Company suffixes to be sure it's a name column
             const hasCompanySuffix = cleanValues.some(v => /\b(sas|sarl|sa|inc|ltd|partners|capital|fund|fonds)\b/i.test(String(v)));
             if (hasCompanySuffix) {
                 scores.name += 60;
@@ -266,7 +240,6 @@ function analyzeColumnValues(header: string, values: any[]): ColumnAnalysis {
         }
     }
 
-    // Number-heavy column
     if (numberRatio > 0.7) {
         if (currencyCount > cleanValues.length * 0.3) {
             scores.investment += 60;
@@ -275,12 +248,10 @@ function analyzeColumnValues(header: string, values: any[]): ColumnAnalysis {
             scores.percentage += 70;
             reasoning.push(`Values look like percentages`);
         } else {
-            // Analyze number characteristics
             const nums = cleanValues.map(v => parseNumber(String(v))).filter(n => !isNaN(n));
             const avg = nums.reduce((a, b) => a + b, 0) / nums.length;
             const hasDecimals = nums.some(n => String(n).includes('.') || n % 1 !== 0);
 
-            // INTELLIGENT RULE: Shares are usually large integers, investment might have decimals or be very large
             if (avg > 1000 && !hasDecimals) {
                 scores.shares += 50;
                 reasoning.push(`Large whole numbers suggest shares (avg: ${avg.toFixed(0)})`);
@@ -291,17 +262,11 @@ function analyzeColumnValues(header: string, values: any[]): ColumnAnalysis {
         }
     }
 
-    // ============================================================
-    // STEP 3: Check for Round Name in Header
-    // ============================================================
     const roundName = VOCABULARY.rounds.extractRoundName(header);
     if (roundName && (scores.shares > 20 || scores.investment > 20 || numberRatio > 0.5)) {
         reasoning.push(`Detected round: "${roundName}"`);
     }
 
-    // ============================================================
-    // STEP 4: Determine Winner
-    // ============================================================
     let maxScore = 0;
     let inferredType: ColumnAnalysis['inferredType'] = 'unknown';
 
@@ -312,7 +277,6 @@ function analyzeColumnValues(header: string, values: any[]): ColumnAnalysis {
         }
     }
 
-    // Normalize confidence (0-100)
     const confidence = Math.min(100, maxScore);
 
     return {
@@ -345,38 +309,28 @@ export const smartColumnMatch = (
 ): { matches: SmartMatchResult[], detectedRounds: DetectedRound[] } => {
     const matches: SmartMatchResult[] = [];
     const detectedRounds: DetectedRound[] = [];
-    const usedTypes = new Set<string>(); // Track unique name/role assignments
 
-    // Analyze each column
     headers.forEach((header, columnIndex) => {
-        // Get values for this column
-        const values = data.slice(0, 20).map(row => row[header]);
-
-        // Run smart analysis
+        const values = data.map(row => row[header]);
         const analysis = analyzeColumnValues(header, values);
-        analysis.columnIndex = columnIndex;
 
         let destination: SmartMatchResult['destination'] = 'ignored';
         let roundId: string | undefined;
         let roundName: string | undefined;
 
-        // Apply type (with uniqueness for name/role)
-        if (analysis.inferredType === 'name' && !usedTypes.has('name')) {
+        if (analysis.inferredType === 'name') {
             destination = 'name';
-            usedTypes.add('name');
-        } else if (analysis.inferredType === 'role' && !usedTypes.has('role')) {
+        } else if (analysis.inferredType === 'role') {
             destination = 'role';
-            usedTypes.add('role');
         } else if (analysis.inferredType === 'shares' || analysis.inferredType === 'investment') {
             destination = analysis.inferredType;
             roundName = analysis.roundName || guessRoundFromContext(header, columnIndex, headers);
 
-            // Find or create round
-            let round = detectedRounds.find(r => r.name.toLowerCase() === roundName?.toLowerCase());
+            let round = detectedRounds.find(r => r.name === roundName);
             if (!round) {
                 round = {
-                    id: `round-${Date.now()}-${detectedRounds.length}`,
-                    name: roundName || `Round ${detectedRounds.length + 1}`
+                    id: `round-${detectedRounds.length + 1}`,
+                    name: roundName,
                 };
                 detectedRounds.push(round);
             }
@@ -384,7 +338,6 @@ export const smartColumnMatch = (
             roundId = round.id;
             roundName = round.name;
 
-            // Track column indices on the round
             if (destination === 'shares') {
                 round.sharesColumnIndex = columnIndex;
             } else {
@@ -406,15 +359,10 @@ export const smartColumnMatch = (
     return { matches, detectedRounds };
 };
 
-/**
- * Try to guess round name from column context (neighboring columns, header patterns)
- */
 function guessRoundFromContext(header: string, index: number, allHeaders: string[]): string {
-    // Check if the header itself contains a round pattern
     const roundFromHeader = VOCABULARY.rounds.extractRoundName(header);
     if (roundFromHeader) return roundFromHeader;
 
-    // Check neighboring headers for round context
     const neighbors = [
         allHeaders[index - 1],
         allHeaders[index + 1]
@@ -425,7 +373,6 @@ function guessRoundFromContext(header: string, index: number, allHeaders: string
         if (roundFromNeighbor) return roundFromNeighbor;
     }
 
-    // Default based on position
     if (index < allHeaders.length / 3) {
         return 'Founding';
     } else if (index < allHeaders.length * 2 / 3) {
@@ -488,20 +435,53 @@ export const parseExcel = (file: File): Promise<{ headers: string[], data: Impor
                 const workbook = XLSX.read(data, { type: 'array' });
                 const firstSheetName = workbook.SheetNames[0];
                 const worksheet = workbook.Sheets[firstSheetName];
-                const jsonData = XLSX.utils.sheet_to_json(worksheet, { header: 1 });
+                const jsonData = XLSX.utils.sheet_to_json(worksheet, { header: 1 }) as any[][];
 
                 if (jsonData.length === 0) {
                     reject(new Error('Excel file is empty'));
                     return;
                 }
 
-                const headers = (jsonData[0] as any[]).map(h => String(h || '').trim());
-                const rows = jsonData.slice(1)
-                    .filter(row => (row as any[]).some(cell => cell !== undefined && cell !== null && cell !== ''))
+                let headerIndex = 0;
+                const keywords = [...VOCABULARY.name.headers, ...VOCABULARY.shares.headers, ...VOCABULARY.investment.headers];
+
+                for (let i = 0; i < Math.min(jsonData.length, 20); i++) {
+                    const row = jsonData[i];
+                    if (!row || row.length < 2) continue;
+
+                    const matchCount = row.filter(cell => {
+                        if (typeof cell !== 'string') return false;
+                        const lower = cell.toLowerCase().trim();
+                        return keywords.some(k => lower.includes(k));
+                    }).length;
+
+                    if (matchCount >= 2) {
+                        headerIndex = i;
+                        break;
+                    }
+                }
+
+                const rawHeaders = jsonData[headerIndex];
+                const headers = rawHeaders.map((h, idx) => {
+                    const strH = String(h || '').trim();
+                    return strH || `Column ${idx + 1}`;
+                });
+
+                const rows = jsonData.slice(headerIndex + 1)
+                    .filter(row => {
+                        if (!row || row.length === 0) return false;
+                        const hasContent = row.some(cell => cell !== undefined && cell !== null && cell !== '');
+                        if (!hasContent) return false;
+
+                        const firstCell = String(row.find(c => c !== undefined && c !== null) || '').toLowerCase();
+                        if (firstCell === 'total' || firstCell.includes('somme')) return false;
+
+                        return true;
+                    })
                     .map(row => {
                         const obj: ImportedRow = {};
                         headers.forEach((header, index) => {
-                            obj[header] = (row as any[])[index];
+                            obj[header] = row[index];
                         });
                         return obj;
                     });
@@ -566,7 +546,6 @@ export const validateImportedData = (
     const warnings: { row: number; column: string; message: string }[] = [];
     const validatedData: ValidatedRow[] = [];
 
-    // Check required columns
     const hasNameColumn = matches.some(m => m.destination === 'name' && m.confidence > 30);
     if (!hasNameColumn) {
         errors.push({ row: 0, column: '-', message: 'No shareholder name column detected.' });
@@ -577,7 +556,6 @@ export const validateImportedData = (
         warnings.push({ row: 0, column: '-', message: 'No shares or investment columns detected.' });
     }
 
-    // Validate each row
     data.forEach((row, rowIndex) => {
         const rowData: Partial<ValidatedRow> = {};
 
@@ -598,6 +576,9 @@ export const validateImportedData = (
                 const numVal = parseNumber(value);
                 if (value !== undefined && value !== null && value !== '' && isNaN(numVal)) {
                     warnings.push({ row: rowIndex + 2, column: match.header, message: `Invalid number: "${value}"` });
+                } else {
+                    if (match.destination === 'shares') rowData.shares = numVal;
+                    else rowData.investment = numVal;
                 }
             }
         });
@@ -615,17 +596,17 @@ export const validateImportedData = (
     };
 };
 
-const parseNumber = (value: any): number => {
-    if (typeof value === 'number') return value;
+export const parseNumber = (value: any): number => {
     if (value === undefined || value === null || value === '') return NaN;
+    if (typeof value === 'number') return value;
 
-    // Handle European number format and currency symbols
     const cleaned = String(value)
-        .replace(/[€$£¥\s]/g, '')
+        .replace(/[€$£¥\s\u00A0]/g, '')
         .replace(/,/g, '.')
         .replace(/\.(?=.*\.)/g, '');
 
-    return parseFloat(cleaned);
+    const result = parseFloat(cleaned);
+    return isNaN(result) ? NaN : result;
 };
 
 // ============================================================
@@ -640,7 +621,6 @@ export const processImportedData = (
     const shareholders: Shareholder[] = [];
     const investmentsMap = new Map<string, Investment[]>();
 
-    // Initialize rounds
     const rounds: Round[] = detectedRounds.map((dr, index) => ({
         id: dr.id,
         name: dr.name,
@@ -658,13 +638,11 @@ export const processImportedData = (
 
     rounds.forEach(r => investmentsMap.set(r.id, []));
 
-    // Process each row
     data.forEach((row, rowIndex) => {
         const id = `sh-import-${rowIndex}`;
         let name = `Shareholder ${rowIndex + 1}`;
         let role: ShareholderRole = 'Angel';
 
-        // Extract name and role
         matches.forEach(match => {
             const value = row[match.header];
             if (value === undefined || value === null) return;
@@ -678,7 +656,6 @@ export const processImportedData = (
 
         shareholders.push({ id, name, role });
 
-        // Extract investments per round
         detectedRounds.forEach(round => {
             let shares = 0;
             let amount = 0;
@@ -710,7 +687,6 @@ export const processImportedData = (
         });
     });
 
-    // Finalize rounds
     const finalRounds = rounds.map(r => {
         const investments = investmentsMap.get(r.id)!;
         const totalShares = investments.reduce((sum, inv) => sum + inv.shares, 0);

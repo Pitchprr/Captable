@@ -5,7 +5,7 @@ import {
     Plus, Trash2, CheckCircle, AlertTriangle, Sparkles, Clipboard, Code
 } from 'lucide-react';
 import { Button } from '../ui/Button';
-import { parseFile, processImportedData, processAIJson, type SmartMatchResult } from '../../utils/excelImport';
+import { parseFile, processImportedData, processAIJson, smartColumnMatch, type SmartMatchResult } from '../../utils/excelImport';
 import type { DetectedRound, ImportedRow } from './types';
 import type { CapTable } from '../../engine/types';
 
@@ -75,15 +75,26 @@ export const ExcelImportView: React.FC<ExcelImportViewProps> = ({ onComplete, on
             setHeaders(result.headers);
             setData(result.data);
 
-            const lowHeaders = Array.from(result.headers || []).map(h => String(h || '').toLowerCase());
-            const nameIdx = lowHeaders.findIndex(h =>
-                (h.includes('nom') || h.includes('name') || h.includes('actionnaire') || h.includes('investor') || h.includes('associé')) &&
-                !h.includes('société') && !h.includes('company')
-            );
-            if (nameIdx !== -1) setNameColumn(result.headers[nameIdx]);
+            // USE SMART HEURISTICS TO PRE-FILL EVERYTHING
+            const { matches, detectedRounds } = smartColumnMatch(result.headers, result.data);
 
-            const roleIdx = lowHeaders.findIndex(h => h.includes('role') || h.includes('type') || h.includes('catégorie'));
-            if (roleIdx !== -1) setRoleColumn(result.headers[roleIdx]);
+            // 1. Detect Base Columns
+            const nameMatch = matches.find(m => m.destination === 'name');
+            if (nameMatch) setNameColumn(nameMatch.header);
+
+            const roleMatch = matches.find(m => m.destination === 'role');
+            if (roleMatch) setRoleColumn(roleMatch.header);
+
+            // 2. Detect Rounds
+            if (detectedRounds.length > 0) {
+                const roundMappings: RoundMapping[] = detectedRounds.map(dr => ({
+                    id: dr.id,
+                    name: dr.name,
+                    sharesColumn: matches.find(m => m.roundId === dr.id && m.destination === 'shares')?.header || '',
+                    investmentColumn: matches.find(m => m.roundId === dr.id && m.destination === 'investment')?.header || ''
+                }));
+                setRounds(roundMappings);
+            }
 
             setStep('columns');
         } catch (err) {
