@@ -2,10 +2,10 @@ import React, { useState, useCallback } from 'react';
 import { useDropzone } from 'react-dropzone';
 import {
     FileSpreadsheet, ArrowRight, X, Upload, RefreshCw,
-    Plus, Trash2, CheckCircle, AlertTriangle, Info
+    Plus, Trash2, CheckCircle, AlertTriangle, Sparkles, Clipboard, Code
 } from 'lucide-react';
 import { Button } from '../ui/Button';
-import { parseFile, processImportedData, type SmartMatchResult } from '../../utils/excelImport';
+import { parseFile, processImportedData, processAIJson, type SmartMatchResult } from '../../utils/excelImport';
 import type { DetectedRound, ImportedRow } from './types';
 import type { CapTable } from '../../engine/types';
 
@@ -21,7 +21,7 @@ interface RoundMapping {
     investmentColumn: string;
 }
 
-type ImportStep = 'upload' | 'columns' | 'rounds' | 'validation' | 'preview';
+type ImportStep = 'upload' | 'ai-paste' | 'columns' | 'rounds' | 'validation' | 'preview';
 
 interface ValidationError {
     id: string;
@@ -39,6 +39,10 @@ export const ExcelImportView: React.FC<ExcelImportViewProps> = ({ onComplete, on
     const [data, setData] = useState<ImportedRow[]>([]);
     const [error, setError] = useState<string | null>(null);
     const [isProcessing, setIsProcessing] = useState(false);
+
+    // AI Paste State
+    const [rawText, setRawText] = useState('');
+    const [showPrompt, setShowPrompt] = useState(false);
 
     // Mapping state
     const [nameColumn, setNameColumn] = useState<string>('');
@@ -71,9 +75,11 @@ export const ExcelImportView: React.FC<ExcelImportViewProps> = ({ onComplete, on
             setHeaders(result.headers);
             setData(result.data);
 
-            // Auto-detect columns (Basic "AI" heuristic)
             const lowHeaders = Array.from(result.headers || []).map(h => String(h || '').toLowerCase());
-            const nameIdx = lowHeaders.findIndex(h => h.includes('nom') || h.includes('name') || h.includes('actionnaire') || h.includes('investor'));
+            const nameIdx = lowHeaders.findIndex(h =>
+                (h.includes('nom') || h.includes('name') || h.includes('actionnaire') || h.includes('investor') || h.includes('associé')) &&
+                !h.includes('société') && !h.includes('company')
+            );
             if (nameIdx !== -1) setNameColumn(result.headers[nameIdx]);
 
             const roleIdx = lowHeaders.findIndex(h => h.includes('role') || h.includes('type') || h.includes('catégorie'));
@@ -88,24 +94,6 @@ export const ExcelImportView: React.FC<ExcelImportViewProps> = ({ onComplete, on
         }
     }, []);
 
-    const { getRootProps, getInputProps, isDragActive } = useDropzone({
-        onDrop,
-        accept: {
-            'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet': ['.xlsx'],
-            'application/vnd.ms-excel': ['.xls', '.xlt', '.xla'],
-            'application/msexcel': ['.xls'],
-            'application/x-msexcel': ['.xls'],
-            'application/x-ms-excel': ['.xls'],
-            'application/x-excel': ['.xls'],
-            'application/x-dos_ms_excel': ['.xls'],
-            'application/xls': ['.xls'],
-            'application/x-xls': ['.xls'],
-            'text/csv': ['.csv'],
-            'application/pdf': ['.pdf']
-        },
-        multiple: false
-    });
-
     const addRound = () => {
         setRounds([...rounds, {
             id: `round-${Date.now()}`,
@@ -115,38 +103,93 @@ export const ExcelImportView: React.FC<ExcelImportViewProps> = ({ onComplete, on
         }]);
     };
 
+    const { getRootProps, getInputProps, isDragActive } = useDropzone({
+        onDrop,
+        accept: {
+            'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet': ['.xlsx'],
+            'application/vnd.ms-excel': ['.xls', '.xlt', '.xla'],
+            'text/csv': ['.csv'],
+            'application/pdf': ['.pdf']
+        },
+        multiple: false
+    });
+
+    const handleAIParse = () => {
+        if (!rawText.trim()) return;
+
+        // If it looks like JSON, try to parse directly
+        if (rawText.trim().startsWith('{') || rawText.trim().startsWith('[')) {
+            try {
+                const parsed = JSON.parse(rawText);
+                // Implementation of direct JSON injection would go here
+                // For now, we still go through validation
+                const capTable = processAIJson(parsed);
+                onComplete(capTable);
+                return;
+            } catch (e) {
+                setError("Format JSON invalide. Si vous avez copié des données Excel, utilisez le bouton Assistant.");
+            }
+        }
+
+        // TSV Parsing (Tab Separated Values from Excel)
+        const lines = rawText.trim().split('\n');
+        const detectedHeaders = lines[0].split('\t').map(h => h.trim());
+        const rows = lines.slice(1).map(line => {
+            const cells = line.split('\t');
+            const row: ImportedRow = {};
+            detectedHeaders.forEach((h, i) => {
+                row[h] = cells[i];
+            });
+            return row;
+        });
+
+        setHeaders(detectedHeaders);
+        setData(rows);
+        setStep('columns');
+    };
+
+    const generateAIPrompt = () => {
+        const prompt = `Agis en expert financier. J'ai un extrait de Cap Table (liste d'actionnaires) brut issu d'un Excel ou d'un OCR. 
+Extrais les données sous forme de JSON structuré pour cet outil.
+Données brutes : 
+"""
+${rawText.slice(0, 2000)}
+"""
+
+Format attendu :
+{
+  "startupName": "Nom de la boîte",
+  "shareholders": [{ "id": "1", "name": "Nom", "role": "Founder|VC|Angel|Employee" }],
+  "rounds": [{ 
+    "name": "Seed", 
+    "shareClass": "A", 
+    "investments": [{ "shareholderId": "1", "shares": 1000, "amount": 5000 }] 
+  }]
+}
+Réponds UNIQUEMENT avec le JSON.`;
+
+        navigator.clipboard.writeText(prompt);
+        setShowPrompt(true);
+        setTimeout(() => setShowPrompt(false), 3000);
+    };
+
     const runValidation = () => {
         const errors: ValidationError[] = [];
-
-        // 1. Check for duplicate names
         const names = new Set();
         data.forEach((row, idx) => {
             const name = String(row[nameColumn] || '').trim();
             if (name && names.has(name)) {
-                errors.push({
-                    id: `dup-${idx}`,
-                    row: idx + 1,
-                    column: nameColumn,
-                    message: `Doublon détecté : "${name}"`,
-                    severity: 'warning'
-                });
+                errors.push({ id: `dup-${idx}`, row: idx + 1, column: nameColumn, message: `Doublon détecté : "${name}"`, severity: 'warning' });
             }
             names.add(name);
         });
 
-        // 2. Check for invalid numbers in share columns
         rounds.forEach(round => {
             if (round.sharesColumn) {
                 data.forEach((row, idx) => {
                     const val = row[round.sharesColumn];
                     if (val && isNaN(parseFloat(String(val).replace(/\s/g, '').replace(',', '.')))) {
-                        errors.push({
-                            id: `num-${round.id}-${idx}`,
-                            row: idx + 1,
-                            column: round.sharesColumn,
-                            message: `Valeur non numérique : "${val}"`,
-                            severity: 'error'
-                        });
+                        errors.push({ id: `num-${round.id}-${idx}`, row: idx + 1, column: round.sharesColumn, message: `Valeur non numérique : "${val}"`, severity: 'error' });
                     }
                 });
             }
@@ -162,26 +205,14 @@ export const ExcelImportView: React.FC<ExcelImportViewProps> = ({ onComplete, on
                 let destination: 'name' | 'role' | 'shares' | 'investment' | 'ignored' = 'ignored';
                 let roundId: string | undefined;
                 let roundName: string | undefined;
-
                 if (header === nameColumn) destination = 'name';
                 else if (header === roleColumn) destination = 'role';
                 else {
                     for (const round of rounds) {
-                        if (header === round.sharesColumn) {
-                            destination = 'shares';
-                            roundId = round.id;
-                            roundName = round.name;
-                            break;
-                        }
-                        if (header === round.investmentColumn) {
-                            destination = 'investment';
-                            roundId = round.id;
-                            roundName = round.name;
-                            break;
-                        }
+                        if (header === round.sharesColumn) { destination = 'shares'; roundId = round.id; roundName = round.name; break; }
+                        if (header === round.investmentColumn) { destination = 'investment'; roundId = round.id; roundName = round.name; break; }
                     }
                 }
-
                 return { header, columnIndex: idx, destination, confidence: 100, roundId, roundName, reasoning: [] };
             });
 
@@ -203,27 +234,21 @@ export const ExcelImportView: React.FC<ExcelImportViewProps> = ({ onComplete, on
 
     return (
         <div className="max-w-5xl mx-auto bg-white rounded-2xl shadow-2xl border border-slate-200 mt-6 overflow-hidden animate-in fade-in zoom-in-95 duration-300">
-            {/* Custom Header with Brand Colors */}
             <div className="bg-slate-900 px-8 py-6 flex justify-between items-center text-white">
                 <div>
                     <h2 className="text-2xl font-black flex items-center gap-3 tracking-tight">
                         <div className="p-2 bg-emerald-500 rounded-xl shadow-lg shadow-emerald-500/20">
-                            <FileSpreadsheet className="w-6 h-6 text-white" />
+                            <Sparkles className="w-6 h-6 text-white" />
                         </div>
-                        Smart Importer AI
+                        Super Importer AI (Beta)
                     </h2>
-                    <p className="text-slate-400 text-sm mt-1 font-medium italic">
-                        Transformez vos fichiers Excel ou PDF en CapTable structurée.
-                    </p>
                 </div>
                 <button onClick={onCancel} className="p-2 hover:bg-white/10 rounded-full transition-colors text-slate-400 hover:text-white">
                     <X className="w-6 h-6" />
                 </button>
             </div>
 
-            {/* Steps Navigation Sidebar Layout could be here, but using horizontal for now */}
             <div className="p-8">
-                {/* Global Error Message */}
                 {error && (
                     <div className="mb-6 p-4 bg-red-50 border border-red-200 rounded-2xl flex items-center gap-3 text-red-700 animate-in slide-in-from-top-2">
                         <AlertTriangle className="w-5 h-5 shrink-0" />
@@ -231,52 +256,76 @@ export const ExcelImportView: React.FC<ExcelImportViewProps> = ({ onComplete, on
                     </div>
                 )}
 
-                {/* STEP: Upload */}
                 {step === 'upload' && (
                     <div className="space-y-8">
                         <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
                             <div
                                 {...getRootProps()}
-                                className={`flex flex-col items-center justify-center p-12 border-4 border-dashed rounded-3xl cursor-pointer transition-all duration-300 ${isDragActive
-                                    ? 'border-emerald-500 bg-emerald-50'
-                                    : 'border-slate-200 hover:border-emerald-400 bg-slate-50 hover:bg-white'
-                                    }`}
+                                className={`flex flex-col items-center justify-center p-12 border-4 border-dashed rounded-3xl cursor-pointer transition-all duration-300 ${isDragActive ? 'border-emerald-500 bg-emerald-50' : 'border-slate-200 hover:border-emerald-400 bg-slate-50'}`}
                             >
                                 <input {...getInputProps()} />
-                                <div className="w-20 h-20 bg-emerald-100 text-emerald-600 rounded-2xl flex items-center justify-center mb-6 shadow-sm">
-                                    {isProcessing ? <RefreshCw className="w-10 h-10 animate-spin" /> : <Upload className="w-10 h-10" />}
+                                <div className="w-16 h-16 bg-blue-100 text-blue-600 rounded-2xl flex items-center justify-center mb-4">
+                                    {isProcessing ? <RefreshCw className="w-8 h-8 animate-spin" /> : <Upload className="w-8 h-8" />}
                                 </div>
-                                <h3 className="text-xl font-bold text-slate-800 mb-2">Choisir un fichier</h3>
-                                <p className="text-slate-500 text-sm text-center max-w-xs">
-                                    Déposez votre XLS, CSV ou <span className="text-blue-600 font-bold">PDF (OCR)</span> ici.
-                                </p>
+                                <h3 className="text-lg font-bold text-slate-800">
+                                    {fileName ? `Fichier : ${fileName}` : 'Scanner un fichier'}
+                                </h3>
+                                <p className="text-slate-500 text-xs text-center mt-2">Dépôt classique (Excel, CSV, PDF)</p>
                             </div>
 
-                            <div className="bg-slate-50 rounded-3xl p-8 border border-slate-200">
-                                <h4 className="font-bold text-slate-800 mb-4 flex items-center gap-2">
-                                    <Info className="w-5 h-5 text-blue-500" />
-                                    Conseils pour l'IA
-                                </h4>
-                                <ul className="space-y-4 text-sm text-slate-600">
-                                    <li className="flex gap-3">
-                                        <div className="w-6 h-6 rounded-full bg-blue-100 text-blue-600 flex items-center justify-center shrink-0 font-bold text-xs">1</div>
-                                        <span>Utilisez une ligne d'en-tête claire (Nom, Part, Round...).</span>
-                                    </li>
-                                    <li className="flex gap-3">
-                                        <div className="w-6 h-6 rounded-full bg-blue-100 text-blue-600 flex items-center justify-center shrink-0 font-bold text-xs">2</div>
-                                        <span>Les montants € et les nombres d'actions sont détectés automatiquement.</span>
-                                    </li>
-                                    <li className="flex gap-3">
-                                        <div className="w-6 h-6 rounded-full bg-blue-100 text-blue-600 flex items-center justify-center shrink-0 font-bold text-xs">3</div>
-                                        <span>L'IA nettoie les espaces et symboles (€, $, %) pour vous.</span>
-                                    </li>
-                                </ul>
+                            <div
+                                onClick={() => setStep('ai-paste')}
+                                className="flex flex-col items-center justify-center p-12 border-4 border-dashed border-emerald-200 bg-emerald-50/30 rounded-3xl cursor-pointer hover:bg-emerald-50 transition-all duration-300 group"
+                            >
+                                <div className="w-16 h-16 bg-emerald-100 text-emerald-600 rounded-2xl flex items-center justify-center mb-4 group-hover:scale-110 transition-transform">
+                                    <Clipboard className="w-8 h-8" />
+                                </div>
+                                <h3 className="text-lg font-bold text-emerald-800">Magique : Coller</h3>
+                                <p className="text-emerald-600/70 text-xs text-center mt-2 font-medium italic">Assisté par IA (Gemini/ChatGPT)</p>
                             </div>
                         </div>
                     </div>
                 )}
 
-                {/* STEP: Columns Rendering (Simplified here for focus on validation) */}
+                {step === 'ai-paste' && (
+                    <div className="space-y-6">
+                        <div className="bg-slate-900 rounded-2xl p-6 text-white overflow-hidden relative">
+                            <div className="flex items-center justify-between mb-4">
+                                <h3 className="font-bold flex items-center gap-2 text-emerald-400">
+                                    <Code className="w-5 h-5" />
+                                    Données Brutes / JSON
+                                </h3>
+                                <div className="flex gap-2">
+                                    <Button
+                                        onClick={generateAIPrompt}
+                                        size="sm"
+                                        className="bg-purple-600 hover:bg-purple-500 border-none text-[10px] h-8"
+                                    >
+                                        {showPrompt ? 'Prompt copié !' : 'Générer Prompt IA'}
+                                    </Button>
+                                </div>
+                            </div>
+                            <textarea
+                                value={rawText}
+                                onChange={(e) => setRawText(e.target.value)}
+                                placeholder="Collez ici votre tableau Excel (copié-collé direct) ou le JSON généré par l'IA..."
+                                className="w-full h-80 bg-slate-800 border border-slate-700 rounded-xl p-4 font-mono text-sm text-emerald-300 placeholder:text-slate-600 focus:ring-2 focus:ring-emerald-500 outline-none resize-none"
+                            />
+                        </div>
+
+                        <div className="flex justify-between">
+                            <Button variant="ghost" onClick={() => setStep('upload')}>Retour</Button>
+                            <Button
+                                onClick={handleAIParse}
+                                disabled={!rawText.trim()}
+                                className="bg-emerald-600 text-white font-black px-12 rounded-xl py-6"
+                            >
+                                Lancer l'Analyse <ArrowRight className="ml-2 w-5 h-5" />
+                            </Button>
+                        </div>
+                    </div>
+                )}
+
                 {step === 'columns' && (
                     <div className="space-y-6">
                         <div className="flex items-center gap-4 p-4 bg-emerald-50 border border-emerald-100 rounded-2xl">
@@ -285,7 +334,7 @@ export const ExcelImportView: React.FC<ExcelImportViewProps> = ({ onComplete, on
                             </div>
                             <div>
                                 <h3 className="font-bold text-emerald-900">Analyse terminée</h3>
-                                <p className="text-emerald-700 text-sm">{data.length} actionnaires trouvés dans "{fileName}"</p>
+                                <p className="text-emerald-700 text-sm">{data.length} actionnaires identifiés</p>
                             </div>
                         </div>
 
@@ -307,13 +356,12 @@ export const ExcelImportView: React.FC<ExcelImportViewProps> = ({ onComplete, on
                         </div>
 
                         <div className="flex justify-between mt-8 pt-8 border-t border-slate-100">
-                            <Button variant="ghost" onClick={() => setStep('upload')}>Retour</Button>
+                            <Button variant="ghost" onClick={() => setStep('ai-paste')}>Retour</Button>
                             <Button onClick={() => setStep('rounds')} disabled={!nameColumn} className="bg-slate-900 text-white hover:bg-slate-800 px-8 rounded-xl font-bold">Mapper les Rounds <ArrowRight className="ml-2 w-4 h-4" /></Button>
                         </div>
                     </div>
                 )}
 
-                {/* STEP: Rounds (Logic kept same but layout improved) */}
                 {step === 'rounds' && (
                     <div className="space-y-8">
                         <div className="flex items-center justify-between">
@@ -358,7 +406,6 @@ export const ExcelImportView: React.FC<ExcelImportViewProps> = ({ onComplete, on
                     </div>
                 )}
 
-                {/* NEW STEP: Validation & Scrubbing */}
                 {step === 'validation' && (
                     <div className="space-y-6">
                         <div className={`p-6 rounded-2xl ${validationErrors.filter(e => e.severity === 'error').length > 0 ? 'bg-red-50 border border-red-200' : 'bg-amber-50 border border-amber-200'}`}>
@@ -412,7 +459,6 @@ export const ExcelImportView: React.FC<ExcelImportViewProps> = ({ onComplete, on
                     </div>
                 )}
 
-                {/* STEP: Preview (Visual improvement) */}
                 {step === 'preview' && (
                     <div className="space-y-6">
                         <div className="bg-emerald-600 p-6 rounded-2xl text-white shadow-lg shadow-emerald-500/20">
@@ -422,16 +468,6 @@ export const ExcelImportView: React.FC<ExcelImportViewProps> = ({ onComplete, on
 
                         <div className="border border-slate-200 rounded-2xl overflow-hidden shadow-sm">
                             <table className="w-full text-sm">
-                                <thead className="bg-slate-50 border-b border-slate-200">
-                                    <tr>
-                                        <th className="px-6 py-4 text-left font-black text-slate-400 uppercase tracking-widest text-[10px]">Actionnaire</th>
-                                        {rounds.filter(r => r.sharesColumn || r.investmentColumn).map(r => (
-                                            <th key={r.id} className="px-6 py-4 text-right font-black text-slate-400 uppercase tracking-widest text-[10px]">
-                                                {r.name}
-                                            </th>
-                                        ))}
-                                    </tr>
-                                </thead>
                                 <tbody className="divide-y divide-slate-100">
                                     {data.slice(0, 8).map((row, idx) => (
                                         <tr key={idx} className="hover:bg-slate-50 transition-colors">
@@ -445,11 +481,6 @@ export const ExcelImportView: React.FC<ExcelImportViewProps> = ({ onComplete, on
                                     ))}
                                 </tbody>
                             </table>
-                            {data.length > 8 && (
-                                <div className="p-4 bg-slate-50 text-center text-xs font-bold text-slate-400 border-t border-slate-100">
-                                    + {data.length - 8} AUTRES ACTIONNAIRES DETECTÉS
-                                </div>
-                            )}
                         </div>
 
                         <div className="flex justify-between mt-8 pt-4 border-t border-slate-100">
