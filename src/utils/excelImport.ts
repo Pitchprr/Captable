@@ -251,34 +251,42 @@ function analyzeColumnValues(header: string, values: any[]): ColumnAnalysis {
     // Text-heavy column
     if (textRatio > 0.7) {
         if (roleMatchCount > cleanValues.length * 0.3) {
-            scores.role += 50;
+            scores.role += 70; // High confidence for role
             reasoning.push(`${roleMatchCount} values match known roles`);
         } else if (namePatternCount > 0 || textCount > 2) {
-            scores.name += 30;
-            reasoning.push(`Text values look like names`);
+            // Check for VC/Company suffixes to be sure it's a name column
+            const hasCompanySuffix = cleanValues.some(v => /\b(sas|sarl|sa|inc|ltd|partners|capital|fund|fonds)\b/i.test(String(v)));
+            if (hasCompanySuffix) {
+                scores.name += 60;
+                reasoning.push(`Contains company/VC suffixes (IA Detection)`);
+            } else {
+                scores.name += 30;
+                reasoning.push(`Text values look like names`);
+            }
         }
     }
 
     // Number-heavy column
     if (numberRatio > 0.7) {
         if (currencyCount > cleanValues.length * 0.3) {
-            scores.investment += 40;
-            reasoning.push(`Values contain currency symbols`);
+            scores.investment += 60;
+            reasoning.push(`Values contain currency symbols or formats`);
         } else if (percentCount > cleanValues.length * 0.5) {
-            scores.percentage += 50;
+            scores.percentage += 70;
             reasoning.push(`Values look like percentages`);
         } else {
             // Analyze number characteristics
             const nums = cleanValues.map(v => parseNumber(String(v))).filter(n => !isNaN(n));
             const avg = nums.reduce((a, b) => a + b, 0) / nums.length;
-            const hasDecimals = nums.some(n => n % 1 !== 0);
+            const hasDecimals = nums.some(n => String(n).includes('.') || n % 1 !== 0);
 
+            // INTELLIGENT RULE: Shares are usually large integers, investment might have decimals or be very large
             if (avg > 1000 && !hasDecimals) {
-                scores.shares += 35;
+                scores.shares += 50;
                 reasoning.push(`Large whole numbers suggest shares (avg: ${avg.toFixed(0)})`);
-            } else if (hasDecimals || avg < 1000) {
-                scores.investment += 25;
-                reasoning.push(`Decimal values suggest amounts`);
+            } else {
+                scores.investment += 40;
+                reasoning.push(`Numeric values (avg: ${avg.toFixed(0)}) mapped to investment/capital`);
             }
         }
     }
