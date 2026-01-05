@@ -393,6 +393,7 @@ function App() {
   };
 
   const handleReset = () => {
+    setActiveTab('captable');
     setCapTable({ shareholders: [], rounds: [], optionGrants: [] });
     setPreferences([]);
     setCarveOutPercent(0);
