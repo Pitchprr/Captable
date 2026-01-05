@@ -72,7 +72,7 @@ export const ExcelImportView: React.FC<ExcelImportViewProps> = ({ onComplete, on
             setData(result.data);
 
             // Auto-detect columns (Basic "AI" heuristic)
-            const lowHeaders = result.headers.map(h => h.toLowerCase());
+            const lowHeaders = Array.from(result.headers || []).map(h => String(h || '').toLowerCase());
             const nameIdx = lowHeaders.findIndex(h => h.includes('nom') || h.includes('name') || h.includes('actionnaire') || h.includes('investor'));
             if (nameIdx !== -1) setNameColumn(result.headers[nameIdx]);
 
