@@ -1,5 +1,5 @@
 import React, { useState, useMemo } from 'react';
-import type { CapTable, LiquidationPreference } from '../../engine/types';
+import type { CapTable, LiquidationPreference, WaterfallConfig } from '../../engine/types';
 import { ComparativeWaterfall } from './ComparativeWaterfall';
 import { TornadoChart, type TornadoDataPoint } from './TornadoChart';
 import { FormattedNumberInput } from '../ui/FormattedNumberInput';
@@ -17,6 +17,7 @@ export interface SensitivityDashboardProps {
     enabled: boolean;
     upfrontRatio?: number;
   };
+  waterfallConfig?: WaterfallConfig;
 }
 
 export const SensitivityDashboard: React.FC<SensitivityDashboardProps> = ({
@@ -25,6 +26,7 @@ export const SensitivityDashboard: React.FC<SensitivityDashboardProps> = ({
   currentExitValuation,
   onExitValuationChange,
   earnoutConfig = { enabled: false, upfrontRatio: 0.7 },
+  waterfallConfig,
 }) => {
   // Interactive state for scenario parameters
   const [bearMultiplier, setBearMultiplier] = useState(0.5);
@@ -59,7 +61,7 @@ export const SensitivityDashboard: React.FC<SensitivityDashboardProps> = ({
         distributable = upfront + paidEarnout;
       }
 
-      const result = calculateWaterfall(capTable, distributable, preferences);
+      const result = calculateWaterfall(capTable, distributable, preferences, waterfallConfig);
 
       const groups = { Founders: 0, Investors: 0, Employees: 0, Other: 0 };
       result.payouts.forEach(p => {
@@ -95,7 +97,7 @@ export const SensitivityDashboard: React.FC<SensitivityDashboardProps> = ({
       buildDataPoint('Investors', 'Investors'),
       buildDataPoint('Employees', 'Employees')
     ];
-  }, [capTable, preferences, currentExitValuation, bearEV, bullEV, stretchEV, bearEarnout, baseEarnout, bullEarnout, stretchEarnout, earnoutConfig]);
+  }, [capTable, preferences, currentExitValuation, bearEV, bullEV, stretchEV, bearEarnout, baseEarnout, bullEarnout, stretchEarnout, earnoutConfig, waterfallConfig]);
 
   return (
     <div className="space-y-6">
@@ -282,6 +284,7 @@ export const SensitivityDashboard: React.FC<SensitivityDashboardProps> = ({
             preferences={preferences}
             scenarios={scenarios}
             earnoutConfig={earnoutConfig}
+            waterfallConfig={waterfallConfig}
           />
         </div>
         <div className="relative">

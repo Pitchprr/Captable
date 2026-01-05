@@ -620,6 +620,7 @@ export const WaterfallView: React.FC<WaterfallViewProps> = ({
                                         ? earnoutUpfront / (earnoutUpfront + earnoutMax)
                                         : 0.7 // Default if 0
                                 }}
+                                waterfallConfig={maConfig}
                             />
                         </div>
                     )}

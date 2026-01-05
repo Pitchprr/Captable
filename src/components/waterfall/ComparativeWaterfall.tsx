@@ -2,7 +2,7 @@ import React, { useMemo } from 'react';
 import {
     BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer
 } from 'recharts';
-import type { CapTable, LiquidationPreference } from '../../engine/types';
+import type { CapTable, LiquidationPreference, WaterfallConfig } from '../../engine/types';
 import { calculateWaterfall } from '../../engine/WaterfallEngine';
 import { formatCurrency } from '../../utils';
 
@@ -21,6 +21,7 @@ interface ComparativeWaterfallProps {
         enabled: boolean;
         upfrontRatio?: number;
     };
+    waterfallConfig?: WaterfallConfig;
 }
 
 interface ChartDataPoint {
@@ -38,7 +39,8 @@ export const ComparativeWaterfall: React.FC<ComparativeWaterfallProps> = ({
     capTable,
     preferences,
     scenarios,
-    earnoutConfig
+    earnoutConfig,
+    waterfallConfig
 }) => {
 
     const chartData = useMemo<ChartDataPoint[]>(() => {
@@ -57,7 +59,7 @@ export const ComparativeWaterfall: React.FC<ComparativeWaterfallProps> = ({
             }
 
             // 2. Run Waterfall
-            const result = calculateWaterfall(capTable, distributable, preferences);
+            const result = calculateWaterfall(capTable, distributable, preferences, waterfallConfig);
 
             // 3. Aggregate by Group
             const groups: Record<string, number> = {
@@ -88,7 +90,7 @@ export const ComparativeWaterfall: React.FC<ComparativeWaterfallProps> = ({
                 Total: distributable
             };
         });
-    }, [capTable, preferences, scenarios, earnoutConfig]);
+    }, [capTable, preferences, scenarios, earnoutConfig, waterfallConfig]);
 
     return (
         <div className="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm h-full">
