@@ -565,24 +565,26 @@ function App() {
               </div>
             </div>
 
-            <div>
-              <div className="flex justify-between items-end mb-1">
-                <p className="text-[10px] text-slate-500 uppercase font-bold tracking-wider">Option Pool</p>
-                <p className="text-[10px] font-mono font-bold text-blue-400">
-                  {Math.round((capTable.optionGrants.reduce((sum, g) => sum + g.shares, 0) / (capTableState.totalPoolShares || 1)) * 100)}% Granted
-                </p>
+            {capTableState.totalPoolShares > 0 && (
+              <div>
+                <div className="flex justify-between items-end mb-1">
+                  <p className="text-[10px] text-slate-500 uppercase font-bold tracking-wider">Option Pool</p>
+                  <p className="text-[10px] font-mono font-bold text-blue-400">
+                    {Math.round((capTable.optionGrants.reduce((sum, g) => sum + g.shares, 0) / (capTableState.totalPoolShares || 1)) * 100)}% Granted
+                  </p>
+                </div>
+                <div className="h-1 bg-slate-800 rounded-full overflow-hidden flex">
+                  <div
+                    className={`h-full ${Math.round((capTable.optionGrants.reduce((sum, g) => sum + g.shares, 0) / capTableState.totalPoolShares) * 100) > 90 ? 'bg-red-500' : 'bg-blue-500'}`}
+                    style={{ width: `${Math.min(100, (capTable.optionGrants.reduce((sum, g) => sum + g.shares, 0) / (capTableState.totalPoolShares || 1)) * 100)}%` }}
+                  />
+                </div>
+                <div className="flex justify-between mt-1">
+                  <span className="text-[9px] text-slate-500">Granted: <span className="text-slate-300">{capTable.optionGrants.reduce((sum, g) => sum + g.shares, 0).toLocaleString()}</span></span>
+                  <span className="text-[9px] text-slate-500">Available: <span className="text-slate-300">{Math.max(0, capTableState.totalPoolShares - capTable.optionGrants.reduce((sum, g) => sum + g.shares, 0)).toLocaleString()}</span></span>
+                </div>
               </div>
-              <div className="h-1 bg-slate-800 rounded-full overflow-hidden flex">
-                <div
-                  className="h-full bg-blue-500"
-                  style={{ width: `${(capTable.optionGrants.reduce((sum, g) => sum + g.shares, 0) / (capTableState.totalPoolShares || 1)) * 100}%` }}
-                />
-              </div>
-              <div className="flex justify-between mt-1">
-                <span className="text-[9px] text-slate-500">Granted: <span className="text-slate-300">{capTable.optionGrants.reduce((sum, g) => sum + g.shares, 0).toLocaleString()}</span></span>
-                <span className="text-[9px] text-slate-500">Available: <span className="text-slate-300">{Math.max(0, capTableState.totalPoolShares - capTable.optionGrants.reduce((sum, g) => sum + g.shares, 0)).toLocaleString()}</span></span>
-              </div>
-            </div>
+            )}
 
             <div className="flex justify-between items-center">
               <p className="text-[10px] text-slate-500 uppercase font-bold tracking-wider">Funding Rounds</p>
@@ -618,23 +620,8 @@ function App() {
             {!isSidebarCollapsed && <span className="font-medium whitespace-nowrap">Waterfall Analysis</span>}
           </button>
 
-          {/* Sensitivity Analysis Tab Link - Only visible if enabled */}
-          {isSensitivityEnabled && (
-            <button
-              onClick={() => setActiveTab('sensitivity')}
-              className={`w-full flex items-center gap-3 px-4 py-3 rounded-lg transition-colors ${activeTab === 'sensitivity'
-                ? 'bg-blue-600 text-white shadow-lg shadow-blue-900/20'
-                : 'text-slate-400 hover:bg-slate-800 hover:text-white'
-                } ${isSidebarCollapsed ? 'justify-center px-2' : ''}`}
-              title={isSidebarCollapsed ? "Sensitivity Analysis" : ""}
-            >
-              <TrendingUp className="w-5 h-5 flex-shrink-0" /> {/* Reuse icon or pick new one like Activity or BarChart2 */}
-              {!isSidebarCollapsed && <span className="font-medium whitespace-nowrap">Sensitivity Analysis</span>}
-            </button>
-          )}
-
-          {/* Sensitivity Tab (Earn-out is typically last) */}
-          {earnoutConfig.enabled && ( // Optional: Keep earnout button logic or separate
+          {/* Earn-out Tab Link - Only visible if enabled */}
+          {earnoutConfig.enabled && (
             <button
               onClick={() => setActiveTab('earnout')}
               className={`w-full flex items-center gap-3 px-4 py-3 rounded-lg transition-colors ${activeTab === 'earnout'
@@ -648,9 +635,46 @@ function App() {
             </button>
           )}
 
+          {/* Sensitivity Analysis Tab Link - Only visible if enabled */}
+          {isSensitivityEnabled && (
+            <button
+              onClick={() => setActiveTab('sensitivity')}
+              className={`w-full flex items-center gap-3 px-4 py-3 rounded-lg transition-colors ${activeTab === 'sensitivity'
+                ? 'bg-blue-600 text-white shadow-lg shadow-blue-900/20'
+                : 'text-slate-400 hover:bg-slate-800 hover:text-white'
+                } ${isSidebarCollapsed ? 'justify-center px-2' : ''}`}
+              title={isSidebarCollapsed ? "Sensitivity Analysis" : ""}
+            >
+              <TrendingUp className="w-5 h-5 flex-shrink-0" />
+              {!isSidebarCollapsed && <span className="font-medium whitespace-nowrap">Sensitivity Analysis</span>}
+            </button>
+          )}
+
 
           {!isSidebarCollapsed && (
             <div className={`mt-4 pt-4 border-t border-slate-800 px-4 space-y-4`}>
+              {/* Activer Earn-out Toggle */}
+              <label className="flex items-center justify-between cursor-pointer group">
+                <span className="text-sm font-medium text-slate-400 group-hover:text-slate-300">Activer Earn-out</span>
+                <div className="relative inline-flex items-center cursor-pointer">
+                  <input
+                    type="checkbox"
+                    className="sr-only peer"
+                    checked={earnoutConfig.enabled}
+                    onChange={(e) => {
+                      const enabled = e.target.checked;
+                      handleEarnoutConfigUpdate({ ...earnoutConfig, enabled });
+                      if (enabled) {
+                        setActiveTab('earnout');
+                      } else if (activeTab === 'earnout') {
+                        setActiveTab('waterfall');
+                      }
+                    }}
+                  />
+                  <div className="w-9 h-5 bg-slate-700 peer-focus:outline-none peer-focus:ring-2 peer-focus:ring-blue-600 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-blue-600"></div>
+                </div>
+              </label>
+
               {/* Activer Sensitivity Toggle */}
               <label className="flex items-center justify-between cursor-pointer group">
                 <span className="text-sm font-medium text-slate-400 group-hover:text-slate-300">Activer Sensitivity</span>
@@ -671,28 +695,6 @@ function App() {
                   />
                   {/* Using a different color (Indigo) for Sensitivity to distinguish */}
                   <div className="w-9 h-5 bg-slate-700 peer-focus:outline-none peer-focus:ring-2 peer-focus:ring-indigo-500 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-indigo-500"></div>
-                </div>
-              </label>
-
-              {/* Activer Earn-out Toggle */}
-              <label className="flex items-center justify-between cursor-pointer group">
-                <span className="text-sm font-medium text-slate-400 group-hover:text-slate-300">Activer Earn-out</span>
-                <div className="relative inline-flex items-center cursor-pointer">
-                  <input
-                    type="checkbox"
-                    className="sr-only peer"
-                    checked={earnoutConfig.enabled}
-                    onChange={(e) => {
-                      const enabled = e.target.checked;
-                      handleEarnoutConfigUpdate({ ...earnoutConfig, enabled });
-                      if (enabled) {
-                        setActiveTab('earnout');
-                      } else if (activeTab === 'earnout') {
-                        setActiveTab('waterfall');
-                      }
-                    }}
-                  />
-                  <div className="w-9 h-5 bg-slate-700 peer-focus:outline-none peer-focus:ring-2 peer-focus:ring-blue-600 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-blue-600"></div>
                 </div>
               </label>
             </div>

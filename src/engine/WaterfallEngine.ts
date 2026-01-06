@@ -138,7 +138,16 @@ export const calculateWaterfall = (
                 description: nwcAdjustment > 0 ? 'Seller bonus' : 'Buyer credit',
                 amount: nwcAdjustment,
                 remainingBalance: exitValuation + nwcAdjustment,
-                isTotal: false
+                isTotal: false,
+                details: {
+                    shareholders: [],
+                    calculation: {
+                        type: 'NWC',
+                        targetNWC: config.nwcAdjustment?.targetNWC,
+                        actualNWC: config.nwcAdjustment?.actualNWC,
+                        formula: `Actual NWC (${config.nwcAdjustment?.actualNWC.toLocaleString()}€) - Target NWC (${config.nwcAdjustment?.targetNWC.toLocaleString()}€) = ${nwcAdjustment.toLocaleString()}€`
+                    }
+                }
             });
         }
         if (escrowAmount > 0) {
@@ -148,7 +157,15 @@ export const calculateWaterfall = (
                 description: `${config.escrow?.percentage}% held for ${config.escrow?.duration} months`,
                 amount: -escrowAmount,
                 remainingBalance: effectiveProceeds + rwReserveAmount,
-                isTotal: false
+                isTotal: false,
+                details: {
+                    shareholders: [],
+                    calculation: {
+                        type: 'Escrow',
+                        percentage: config.escrow?.percentage,
+                        formula: `${config.escrow?.percentage}% of Exit Valuation (${exitValuation.toLocaleString()}€) held for ${config.escrow?.duration} months`
+                    }
+                }
             });
         }
         if (rwReserveAmount > 0) {
@@ -158,7 +175,15 @@ export const calculateWaterfall = (
                 description: `${config.rwReserve?.percentage}% for R&W claims`,
                 amount: -rwReserveAmount,
                 remainingBalance: effectiveProceeds,
-                isTotal: false
+                isTotal: false,
+                details: {
+                    shareholders: [],
+                    calculation: {
+                        type: 'RWReserve',
+                        percentage: config.rwReserve?.percentage,
+                        formula: `${config.rwReserve?.percentage}% of Exit Valuation (${exitValuation.toLocaleString()}€) reserved for R&W claims`
+                    }
+                }
             });
         }
     }

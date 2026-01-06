@@ -98,7 +98,7 @@ export function FormattedNumberInput({
             onFocus={handleFocus}
             onBlur={handleBlur}
             onChange={handleChange}
-            className={`w-full px-3 py-2 bg-white border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-all ${className} ${prefix ? 'pl-8' : ''} ${suffix ? 'pr-8' : ''}`}
+            className={`w-full px-3 py-2 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-all ${!className.includes('bg-') ? 'bg-white' : ''} ${!className.includes('border-') ? 'border border-slate-200' : ''} ${!className.includes('text-') ? 'text-slate-900' : ''} ${className} ${prefix ? 'pl-8' : ''} ${suffix ? 'pr-8' : ''}`}
             placeholder={placeholder}
         />
     );

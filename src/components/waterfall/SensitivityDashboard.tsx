@@ -123,7 +123,7 @@ export const SensitivityDashboard: React.FC<SensitivityDashboardProps> = ({
           <FormattedNumberInput
             value={currentExitValuation}
             onChange={(val) => onExitValuationChange?.(val)}
-            className="flex-1 px-4 py-3 bg-slate-800 border border-slate-600 rounded-xl text-white text-lg font-mono focus:ring-2 focus:ring-blue-500"
+            className="flex-1 px-4 py-3 bg-white border-2 border-slate-300 rounded-xl text-slate-900 text-lg font-mono focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
           />
           <span className="text-slate-400 text-sm">{formatCurrency(currentExitValuation)}</span>
         </div>

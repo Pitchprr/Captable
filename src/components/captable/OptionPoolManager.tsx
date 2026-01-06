@@ -112,6 +112,8 @@ export const OptionPoolManager: React.FC<OptionPoolManagerProps> = ({ capTable, 
     const totals = getTotals();
     const percentUsed = totals.total > 0 ? (totals.granted / totals.total) * 100 : 0;
 
+    if (totals.total === 0 && totals.granted === 0) return null;
+
     return (
         <div className="space-y-6">
             <div className="flex items-center justify-between">

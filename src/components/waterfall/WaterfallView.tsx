@@ -196,45 +196,46 @@ export const WaterfallView: React.FC<WaterfallViewProps> = ({
 
     return (
         <div className="space-y-4">
-            <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 items-start">
+            <div className={`grid grid-cols-1 ${viewMode === 'waterfall' ? 'lg:grid-cols-3' : ''} gap-6 items-start`}>
                 {/* Configuration Panel - Left Side */}
-                <div className="lg:col-span-1 space-y-4 self-start">
+                {viewMode === 'waterfall' && (
+                    <div className="lg:col-span-1 space-y-4 self-start">
+                        {/* Exit Scenario & Payout Structure */}
+                        <>
+                            <div className="bg-white p-5 rounded-xl border border-slate-200 shadow-sm">
+                                <div className="flex items-center justify-between mb-3">
+                                    <h3 className="text-base font-bold text-slate-800">Exit Scenario</h3>
+                                    {earnoutEnabled && <span className="text-[10px] bg-purple-100 text-purple-700 px-2 py-0.5 rounded-full font-bold uppercase tracking-wide">Earn-out On</span>}
+                                </div>
 
-                    {/* Exit Scenario */}
-                    <div className="bg-white p-5 rounded-xl border border-slate-200 shadow-sm">
-                        <div className="flex items-center justify-between mb-3">
-                            <h3 className="text-base font-bold text-slate-800">Exit Scenario</h3>
-                            {earnoutEnabled && <span className="text-[10px] bg-purple-100 text-purple-700 px-2 py-0.5 rounded-full font-bold uppercase tracking-wide">Earn-out On</span>}
-                        </div>
+                                <div className="space-y-4">
+                                    <div>
+                                        <label className="block text-sm font-medium text-slate-700 mb-1">
+                                            Exit Valuation (EV)
+                                        </label>
+                                        <FormattedNumberInput
+                                            value={exitValuation}
+                                            onChange={onExitValuationChange}
+                                            className="flex h-10 w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all duration-200"
+                                        />
+                                    </div>
 
-                        <div className="space-y-4">
-                            <div>
-                                <label className="block text-sm font-medium text-slate-700 mb-1">
-                                    Exit Valuation (EV)
-                                </label>
-                                <FormattedNumberInput
-                                    value={exitValuation}
-                                    onChange={onExitValuationChange}
-                                    className="flex h-10 w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all duration-200"
-                                />
+                                    {/* Earn-out Visual Decomposition */}
+                                    {earnoutEnabled && earnoutUpfront > 0 && (
+                                        <div className="bg-slate-50 border border-slate-200 rounded-lg p-3">
+                                            <div className="flex h-4 rounded-full overflow-hidden border border-slate-200 mb-2">
+                                                <div className="bg-blue-500 flex items-center justify-center transition-all duration-500" style={{ width: `${(earnoutUpfront / exitValuation) * 100}%` }}></div>
+                                                <div className="bg-purple-400 flex items-center justify-center transition-all duration-500" style={{ width: `${(earnoutMax / exitValuation) * 100}%` }}></div>
+                                            </div>
+                                            <div className="flex justify-between text-xs text-slate-500">
+                                                <div className="flex items-center gap-1.5"><div className="w-2 h-2 rounded-full bg-blue-500"></div>Upfront: {formatCurrency(earnoutUpfront)}</div>
+                                                <div className="flex items-center gap-1.5"><div className="w-2 h-2 rounded-full bg-purple-400"></div>Earn-out: {formatCurrency(earnoutMax)}</div>
+                                            </div>
+                                        </div>
+                                    )}
+                                </div>
                             </div>
 
-
-
-                            {/* Earn-out Visual Decomposition */}
-                            {earnoutEnabled && earnoutUpfront > 0 && (
-                                <div className="bg-slate-50 border border-slate-200 rounded-lg p-3">
-                                    <div className="flex h-4 rounded-full overflow-hidden border border-slate-200 mb-2">
-                                        <div className="bg-blue-500 flex items-center justify-center transition-all duration-500" style={{ width: `${(earnoutUpfront / exitValuation) * 100}%` }}></div>
-                                        <div className="bg-purple-400 flex items-center justify-center transition-all duration-500" style={{ width: `${(earnoutMax / exitValuation) * 100}%` }}></div>
-                                    </div>
-                                    <div className="flex justify-between text-xs text-slate-500">
-                                        <div className="flex items-center gap-1.5"><div className="w-2 h-2 rounded-full bg-blue-500"></div>Upfront: {formatCurrency(earnoutUpfront)}</div>
-                                        <div className="flex items-center gap-1.5"><div className="w-2 h-2 rounded-full bg-purple-400"></div>Earn-out: {formatCurrency(earnoutMax)}</div>
-                                    </div>
-                                </div>
-                            )}
-                            {/* Payout Structure Selection */}
                             <div className="bg-white p-5 rounded-xl border border-slate-200 shadow-sm">
                                 <div className="flex items-center gap-2 mb-4">
                                     <h3 className="text-base font-bold text-slate-800">Payout Structure</h3>
@@ -297,298 +298,298 @@ export const WaterfallView: React.FC<WaterfallViewProps> = ({
                                     </button>
                                 </div>
                             </div>
-                        </div>
-                    </div>
 
-                    {/* 3. Liquidation Preferences Config */}
-                    <PreferenceConfig
-                        preferences={preferences}
-                        setPreferences={setPreferences}
-                        capTable={capTable}
-                    />
+                            {/* 3. Liquidation Preferences Config */}
+                            <PreferenceConfig
+                                preferences={preferences}
+                                setPreferences={setPreferences}
+                                capTable={capTable}
+                            />
 
-                    {/* 4. Carve-Out (Redesigned with Toggle) */}
-                    <div className="bg-white p-5 rounded-xl border border-slate-200 shadow-sm relative group hover:border-amber-300 transition-colors z-0">
-                        <div className="absolute top-0 right-0 p-3 opacity-5 group-hover:opacity-10 transition-opacity">
-                            <span className="text-4xl">🎁</span>
-                        </div>
-                        <div className="flex items-center justify-between mb-4 border-b border-slate-100 pb-3">
-                            <h3 className="text-sm font-bold text-slate-800 flex items-center gap-2">
-                                <span>🎁</span> Mgt Carve-Out
-                            </h3>
-                            <button
-                                onClick={() => setIsCarveOutActive(!isCarveOutActive)}
-                                className={`w-9 h-5 rounded-full relative transition-colors duration-200 focus:outline-none ${isCarveOutActive ? 'bg-amber-500' : 'bg-slate-200'}`}
-                            >
-                                <div className={`w-3.5 h-3.5 bg-white rounded-full absolute top-[3px] transition-transform duration-200 shadow-sm ${isCarveOutActive ? 'left-[19px]' : 'left-[3px]'}`} />
-                            </button>
-                        </div>
-
-                        <div className={`space-y-4 transition-all duration-300 overflow-hidden ${isCarveOutActive ? 'opacity-100 max-h-96' : 'opacity-50 max-h-0'}`}>
-                            <div>
-                                <div className="flex justify-between text-xs mb-1.5">
-                                    <span className="text-slate-500 font-medium">Carve-out Size</span>
-                                    <span className="text-amber-600 font-bold">{carveOutPercent}%</span>
+                            {/* 4. Carve-Out (Redesigned with Toggle) */}
+                            <div className="bg-white p-5 rounded-xl border border-slate-200 shadow-sm relative group hover:border-amber-300 transition-colors z-0">
+                                <div className="absolute top-0 right-0 p-3 opacity-5 group-hover:opacity-10 transition-opacity">
+                                    <span className="text-4xl">🎁</span>
                                 </div>
-                                <input
-                                    type="range"
-                                    min="0"
-                                    max="25"
-                                    step="0.5"
-                                    value={carveOutPercent}
-                                    onChange={(e) => {
-                                        setCarveOutPercent(Number(e.target.value));
-                                        if (!isCarveOutActive) setIsCarveOutActive(true);
-                                    }}
-                                    className="w-full accent-amber-500 h-1.5 bg-slate-200 rounded-lg appearance-none cursor-pointer"
-                                />
-                                <div className="flex justify-between text-[10px] text-slate-400 mt-1">
-                                    <span>0%</span>
-                                    <span>25%</span>
-                                </div>
-                            </div>
-                            <div className="pt-2 border-t border-slate-100">
-                                <label className="block text-xs font-medium text-slate-500 mb-1.5">Beneficiary</label>
-                                <div className="flex bg-slate-100 p-1 rounded-lg">
-                                    {(['team', 'founders-only', 'everyone'] as CarveOutBeneficiary[]).map((b) => (
-                                        <button
-                                            key={b}
-                                            onClick={() => setCarveOutBeneficiary(b)}
-                                            className={`flex-1 py-1.5 text-[10px] font-bold uppercase tracking-wide rounded-md transition-all ${carveOutBeneficiary === b
-                                                ? 'bg-white text-amber-600 shadow-sm'
-                                                : 'text-slate-400 hover:text-slate-600'
-                                                }`}
-                                        >
-                                            {b === 'founders-only' ? 'Founders' : b.charAt(0).toUpperCase() + b.slice(1)}
-                                        </button>
-                                    ))}
-                                </div>
-                            </div>
-                        </div>
-                    </div>
-
-                    {/* 5. M&A Clause Adjustments - New Look */}
-                    <div className="bg-white rounded-xl border border-slate-200 shadow-sm">
-                        <div className="p-4 border-b border-slate-100 flex items-center justify-between bg-slate-50/50 rounded-t-xl">
-                            <div className="flex items-center gap-2">
-                                <Settings className="w-4 h-4 text-slate-400" />
-                                <h3 className="text-sm font-bold text-slate-800">M&A Adjustments</h3>
-                                <Tooltip content="Ajustements financiers appliqués à la valeur d'entreprise pour arriver au montant net distribuable aux actionnaires." />
-                            </div>
-                            <button
-                                onClick={() => setIsMaCollapsed(!isMaCollapsed)}
-                                className="text-xs font-semibold text-slate-500 hover:text-slate-800 transition-colors flex items-center gap-1"
-                            >
-                                {isMaCollapsed ? <><ChevronDown className="w-3.5 h-3.5" /> Show</> : <><ChevronUp className="w-3.5 h-3.5" /> Hide</>}
-                            </button>
-                        </div>
-
-                        {!isMaCollapsed && (
-                            <div className="p-4 space-y-4 animate-in fade-in slide-in-from-top-2 duration-300">
-                                {/* Escrow Card */}
-                                <div className={`p-4 rounded-xl border transition-all ${escrowEnabled ? 'bg-blue-50/30 border-blue-200 shadow-sm' : 'bg-slate-50 border-slate-200 opacity-60'}`}>
-                                    <div className="flex items-center justify-between mb-3">
-                                        <div className="flex items-center gap-2">
-                                            <div className={`p-1.5 rounded-lg ${escrowEnabled ? 'bg-blue-100 text-blue-600' : 'bg-slate-200 text-slate-400'}`}>
-                                                <Lock className="w-4 h-4" />
-                                            </div>
-                                            <div>
-                                                <div className="flex items-center gap-1.5">
-                                                    <h4 className="text-sm font-bold text-slate-800">Escrow on Upfront</h4>
-                                                    <Tooltip content="Une partie du prix est bloquée sur un compte tiers (séquestre) pour garantir les éventuelles réclamations de l'acheteur." />
-                                                </div>
-                                                <p className="text-[10px] text-slate-500 leading-none mt-0.5">Hold portion of upfront for claims</p>
-                                            </div>
-                                        </div>
-                                        <button
-                                            onClick={() => setEscrowEnabled(!escrowEnabled)}
-                                            className={`w-9 h-5 rounded-full relative transition-colors duration-200 ${escrowEnabled ? 'bg-blue-600' : 'bg-slate-300'}`}
-                                        >
-                                            <div className={`w-3.5 h-3.5 bg-white rounded-full absolute top-[3px] transition-transform duration-200 shadow-sm ${escrowEnabled ? 'left-[19px]' : 'left-[3px]'}`} />
-                                        </button>
-                                    </div>
-
-                                    <div className="grid grid-cols-2 gap-3 mt-4">
-                                        <div>
-                                            <label className="text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1 block">% Held</label>
-                                            <input
-                                                type="number"
-                                                value={escrowPercent}
-                                                onChange={(e) => setEscrowPercent(Number(e.target.value))}
-                                                className="w-full text-sm py-2 px-3 border border-slate-200 rounded-lg focus:ring-2 focus:ring-blue-100 outline-none transition-all bg-white font-medium"
-                                            />
-                                        </div>
-                                        <div>
-                                            <label className="text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1 block">Duration (months)</label>
-                                            <input
-                                                type="number"
-                                                value={escrowDuration}
-                                                onChange={(e) => setEscrowDuration(Number(e.target.value))}
-                                                className="w-full text-sm py-2 px-3 border border-slate-200 rounded-lg focus:ring-2 focus:ring-blue-100 outline-none transition-all bg-white font-medium"
-                                            />
-                                        </div>
-                                    </div>
-
-                                    {escrowEnabled && (
-                                        <div className="mt-4 bg-blue-100/50 p-2 rounded-lg border border-blue-200 text-center animate-in zoom-in-95 duration-200">
-                                            <span className="text-sm font-bold text-blue-700">
-                                                Escrow: {formatCurrency(effectiveExitValuation * (escrowPercent / 100))}
-                                            </span>
-                                        </div>
-                                    )}
+                                <div className="flex items-center justify-between mb-4 border-b border-slate-100 pb-3">
+                                    <h3 className="text-sm font-bold text-slate-800 flex items-center gap-2">
+                                        <span>🎁</span> Mgt Carve-Out
+                                    </h3>
+                                    <button
+                                        onClick={() => setIsCarveOutActive(!isCarveOutActive)}
+                                        className={`w-9 h-5 rounded-full relative transition-colors duration-200 focus:outline-none ${isCarveOutActive ? 'bg-amber-500' : 'bg-slate-200'}`}
+                                    >
+                                        <div className={`w-3.5 h-3.5 bg-white rounded-full absolute top-[3px] transition-transform duration-200 shadow-sm ${isCarveOutActive ? 'left-[19px]' : 'left-[3px]'}`} />
+                                    </button>
                                 </div>
 
-                                {/* R&W Reserve Card */}
-                                <div className={`p-4 rounded-xl border transition-all ${rwReserveEnabled ? 'bg-red-50/30 border-red-200 shadow-sm' : 'bg-slate-50 border-slate-200 opacity-60'}`}>
-                                    <div className="flex items-center justify-between mb-3">
-                                        <div className="flex items-center gap-2">
-                                            <div className={`p-1.5 rounded-lg ${rwReserveEnabled ? 'bg-red-100 text-red-600' : 'bg-slate-200 text-slate-400'}`}>
-                                                <ShieldAlert className="w-4 h-4" />
-                                            </div>
-                                            <div>
-                                                <div className="flex items-center gap-1.5">
-                                                    <h4 className="text-sm font-bold text-slate-800">R&W Reserve</h4>
-                                                    <Tooltip content="Réserve spécifique pour couvrir les risques liés aux Déclarations et Garanties (Representations & Warranties)." />
-                                                </div>
-                                                <p className="text-[10px] text-slate-500 leading-none mt-0.5">Representations & Warranties claims</p>
-                                            </div>
+                                <div className={`space-y-4 transition-all duration-300 overflow-hidden ${isCarveOutActive ? 'opacity-100 max-h-96' : 'opacity-50 max-h-0'}`}>
+                                    <div>
+                                        <div className="flex justify-between text-xs mb-1.5">
+                                            <span className="text-slate-500 font-medium">Carve-out Size</span>
+                                            <span className="text-amber-600 font-bold">{carveOutPercent}%</span>
                                         </div>
-                                        <button
-                                            onClick={() => setRwReserveEnabled(!rwReserveEnabled)}
-                                            className={`w-9 h-5 rounded-full relative transition-colors duration-200 ${rwReserveEnabled ? 'bg-red-600' : 'bg-slate-300'}`}
-                                        >
-                                            <div className={`w-3.5 h-3.5 bg-white rounded-full absolute top-[3px] transition-transform duration-200 shadow-sm ${rwReserveEnabled ? 'left-[19px]' : 'left-[3px]'}`} />
-                                        </button>
-                                    </div>
-
-                                    <div className="mt-4">
-                                        <label className="text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1 block">% Reserved for R&W</label>
                                         <input
-                                            type="number"
-                                            value={rwReservePercent}
-                                            onChange={(e) => setRwReservePercent(Number(e.target.value))}
-                                            className="w-full text-sm py-2 px-3 border border-slate-200 rounded-lg focus:ring-2 focus:ring-red-100 outline-none transition-all bg-white font-medium"
+                                            type="range"
+                                            min="0"
+                                            max="25"
+                                            step="0.5"
+                                            value={carveOutPercent}
+                                            onChange={(e) => {
+                                                setCarveOutPercent(Number(e.target.value));
+                                                if (!isCarveOutActive) setIsCarveOutActive(true);
+                                            }}
+                                            className="w-full accent-amber-500 h-1.5 bg-slate-200 rounded-lg appearance-none cursor-pointer"
                                         />
-                                    </div>
-
-                                    {rwReserveEnabled && (
-                                        <div className="mt-4 bg-red-100/50 p-2 rounded-lg border border-red-200 text-center animate-in zoom-in-95 duration-200">
-                                            <span className="text-sm font-bold text-red-700">
-                                                Reserve: {formatCurrency(effectiveExitValuation * (rwReservePercent / 100))}
-                                            </span>
-                                        </div>
-                                    )}
-                                </div>
-
-                                {/* NWC Adjustment Card */}
-                                <div className={`p-4 rounded-xl border transition-all ${nwcEnabled ? 'bg-emerald-50/30 border-emerald-200 shadow-sm' : 'bg-slate-50 border-slate-200 opacity-60'}`}>
-                                    <div className="flex items-center justify-between mb-3">
-                                        <div className="flex items-center gap-2">
-                                            <div className={`p-1.5 rounded-lg ${nwcEnabled ? 'bg-emerald-100 text-emerald-600' : 'bg-slate-200 text-slate-400'}`}>
-                                                <BarChart3 className="w-4 h-4" />
-                                            </div>
-                                            <div>
-                                                <div className="flex items-center gap-1.5">
-                                                    <h4 className="text-sm font-bold text-slate-800">Net Working Capital</h4>
-                                                    <Tooltip content="Ajustement lié à la différence entre le BFR réel à la clôture et un BFR cible défini dans le SPA." />
-                                                </div>
-                                                <p className="text-[10px] text-slate-500 leading-none mt-0.5">Adjust for NWC variance at closing</p>
-                                            </div>
-                                        </div>
-                                        <button
-                                            onClick={() => setNwcEnabled(!nwcEnabled)}
-                                            className={`w-9 h-5 rounded-full relative transition-colors duration-200 ${nwcEnabled ? 'bg-emerald-600' : 'bg-slate-300'}`}
-                                        >
-                                            <div className={`w-3.5 h-3.5 bg-white rounded-full absolute top-[3px] transition-transform duration-200 shadow-sm ${nwcEnabled ? 'left-[19px]' : 'left-[3px]'}`} />
-                                        </button>
-                                    </div>
-
-                                    <div className="grid grid-cols-2 gap-3 mt-4">
-                                        <div>
-                                            <label className="text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1 block">Target NWC (SPA)</label>
-                                            <FormattedNumberInput
-                                                value={nwcTarget}
-                                                onChange={setNwcTarget}
-                                                className="w-full text-sm py-2 px-3 border border-slate-200 rounded-lg focus:ring-2 focus:ring-emerald-100 outline-none transition-all bg-white font-medium"
-                                            />
-                                        </div>
-                                        <div>
-                                            <label className="text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1 block">Actual NWC (Closing)</label>
-                                            <FormattedNumberInput
-                                                value={nwcActual}
-                                                onChange={setNwcActual}
-                                                className="w-full text-sm py-2 px-3 border border-slate-200 rounded-lg focus:ring-2 focus:ring-emerald-100 outline-none transition-all bg-white font-medium"
-                                            />
+                                        <div className="flex justify-between text-[10px] text-slate-400 mt-1">
+                                            <span>0%</span>
+                                            <span>25%</span>
                                         </div>
                                     </div>
-
-                                    {nwcEnabled && (
-                                        <div className="mt-4 bg-emerald-100/50 p-2 rounded-lg border border-emerald-200 text-center animate-in zoom-in-95 duration-200">
-                                            <span className="text-sm font-bold text-emerald-700">
-                                                Adjustment: {(nwcActual - nwcTarget) >= 0 ? '+' : ''}{formatCurrency(nwcActual - nwcTarget)} {(nwcActual - nwcTarget) >= 0 ? '(Seller bonus)' : '(Buyer discount)'}
-                                            </span>
-                                        </div>
-                                    )}
-                                </div>
-
-                                {/* Calculation Summary Table Card */}
-                                <div className="bg-slate-900 rounded-xl p-5 text-white shadow-xl shadow-slate-950/20">
-                                    <div className="flex items-center gap-2 mb-4 pb-3 border-b border-slate-800">
-                                        <ClipboardList className="w-4 h-4 text-slate-400" />
-                                        <h4 className="text-xs font-bold uppercase tracking-widest text-slate-300">Effective Proceeds Calculation</h4>
-                                    </div>
-
-                                    <div className="space-y-2.5">
-                                        <div className="flex justify-between items-center text-sm">
-                                            <span className="text-slate-400">Exit Valuation</span>
-                                            <span className="font-mono font-bold">{formatCurrency(effectiveExitValuation)}</span>
-                                        </div>
-
-                                        {escrowEnabled && (
-                                            <div className="flex justify-between items-center text-sm">
-                                                <span className="text-slate-400">- Escrow ({escrowPercent}%)</span>
-                                                <span className="font-mono font-bold text-blue-400">-{formatCurrency(effectiveExitValuation * (escrowPercent / 100))}</span>
-                                            </div>
-                                        )}
-
-                                        {rwReserveEnabled && (
-                                            <div className="flex justify-between items-center text-sm">
-                                                <span className="text-slate-400">- R&W Reserve ({rwReservePercent}%)</span>
-                                                <span className="font-mono font-bold text-red-400">-{formatCurrency(effectiveExitValuation * (rwReservePercent / 100))}</span>
-                                            </div>
-                                        )}
-
-                                        {nwcEnabled && (
-                                            <div className="flex justify-between items-center text-sm">
-                                                <span className="text-slate-400">{(nwcActual - nwcTarget) >= 0 ? '+ NWC Bonus' : '- NWC Discount'}</span>
-                                                <span className={`font-mono font-bold ${(nwcActual - nwcTarget) >= 0 ? 'text-emerald-400' : 'text-red-400'}`}>
-                                                    {(nwcActual - nwcTarget) >= 0 ? '+' : ''}{formatCurrency(nwcActual - nwcTarget)}
-                                                </span>
-                                            </div>
-                                        )}
-
-                                        <div className="pt-3 border-t border-slate-800 flex justify-between items-end mt-2">
-                                            <span className="text-xs font-bold uppercase tracking-wider text-slate-500">Distributable Proceeds</span>
-                                            <div className="text-right">
-                                                <div className="text-lg font-bold text-emerald-400 leading-tight">
-                                                    {formatCurrency(
-                                                        effectiveExitValuation
-                                                        - (escrowEnabled ? effectiveExitValuation * (escrowPercent / 100) : 0)
-                                                        - (rwReserveEnabled ? effectiveExitValuation * (rwReservePercent / 100) : 0)
-                                                        + (nwcEnabled ? (nwcActual - nwcTarget) : 0)
-                                                    )}
-                                                </div>
-                                            </div>
+                                    <div className="pt-2 border-t border-slate-100">
+                                        <label className="block text-xs font-medium text-slate-500 mb-1.5">Beneficiary</label>
+                                        <div className="flex bg-slate-100 p-1 rounded-lg">
+                                            {(['team', 'founders-only', 'everyone'] as CarveOutBeneficiary[]).map((b) => (
+                                                <button
+                                                    key={b}
+                                                    onClick={() => setCarveOutBeneficiary(b)}
+                                                    className={`flex-1 py-1.5 text-[10px] font-bold uppercase tracking-wide rounded-md transition-all ${carveOutBeneficiary === b
+                                                        ? 'bg-white text-amber-600 shadow-sm'
+                                                        : 'text-slate-400 hover:text-slate-600'
+                                                        }`}
+                                                >
+                                                    {b === 'founders-only' ? 'Founders' : b.charAt(0).toUpperCase() + b.slice(1)}
+                                                </button>
+                                            ))}
                                         </div>
                                     </div>
                                 </div>
                             </div>
-                        )}
+
+                            {/* 5. M&A Clause Adjustments - New Look */}
+                            <div className="bg-white rounded-xl border border-slate-200 shadow-sm">
+                                <div className="p-4 border-b border-slate-100 flex items-center justify-between bg-slate-50/50 rounded-t-xl">
+                                    <div className="flex items-center gap-2">
+                                        <Settings className="w-4 h-4 text-slate-400" />
+                                        <h3 className="text-sm font-bold text-slate-800">M&A Adjustments</h3>
+                                        <Tooltip content="Ajustements financiers appliqués à la valeur d'entreprise pour arriver au montant net distribuable aux actionnaires." />
+                                    </div>
+                                    <button
+                                        onClick={() => setIsMaCollapsed(!isMaCollapsed)}
+                                        className="text-xs font-semibold text-slate-500 hover:text-slate-800 transition-colors flex items-center gap-1"
+                                    >
+                                        {isMaCollapsed ? <><ChevronDown className="w-3.5 h-3.5" /> Show</> : <><ChevronUp className="w-3.5 h-3.5" /> Hide</>}
+                                    </button>
+                                </div>
+
+                                {!isMaCollapsed && (
+                                    <div className="p-4 space-y-4 animate-in fade-in slide-in-from-top-2 duration-300">
+                                        {/* Escrow Card */}
+                                        <div className={`p-4 rounded-xl border transition-all ${escrowEnabled ? 'bg-blue-50/30 border-blue-200 shadow-sm' : 'bg-slate-50 border-slate-200 opacity-60'}`}>
+                                            <div className="flex items-center justify-between mb-3">
+                                                <div className="flex items-center gap-2">
+                                                    <div className={`p-1.5 rounded-lg ${escrowEnabled ? 'bg-blue-100 text-blue-600' : 'bg-slate-200 text-slate-400'}`}>
+                                                        <Lock className="w-4 h-4" />
+                                                    </div>
+                                                    <div>
+                                                        <div className="flex items-center gap-1.5">
+                                                            <h4 className="text-sm font-bold text-slate-800">Escrow on Upfront</h4>
+                                                            <Tooltip content="Une partie du prix est bloquée sur un compte tiers (séquestre) pour garantir les éventuelles réclamations de l'acheteur." />
+                                                        </div>
+                                                        <p className="text-[10px] text-slate-500 leading-none mt-0.5">Hold portion of upfront for claims</p>
+                                                    </div>
+                                                </div>
+                                                <button
+                                                    onClick={() => setEscrowEnabled(!escrowEnabled)}
+                                                    className={`w-9 h-5 rounded-full relative transition-colors duration-200 ${escrowEnabled ? 'bg-blue-600' : 'bg-slate-300'}`}
+                                                >
+                                                    <div className={`w-3.5 h-3.5 bg-white rounded-full absolute top-[3px] transition-transform duration-200 shadow-sm ${escrowEnabled ? 'left-[19px]' : 'left-[3px]'}`} />
+                                                </button>
+                                            </div>
+
+                                            <div className="grid grid-cols-2 gap-3 mt-4">
+                                                <div>
+                                                    <label className="text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1 block">% Held</label>
+                                                    <input
+                                                        type="number"
+                                                        value={escrowPercent}
+                                                        onChange={(e) => setEscrowPercent(Number(e.target.value))}
+                                                        className="w-full text-sm py-2 px-3 border border-slate-200 rounded-lg focus:ring-2 focus:ring-blue-100 outline-none transition-all bg-white font-medium"
+                                                    />
+                                                </div>
+                                                <div>
+                                                    <label className="text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1 block">Duration (months)</label>
+                                                    <input
+                                                        type="number"
+                                                        value={escrowDuration}
+                                                        onChange={(e) => setEscrowDuration(Number(e.target.value))}
+                                                        className="w-full text-sm py-2 px-3 border border-slate-200 rounded-lg focus:ring-2 focus:ring-blue-100 outline-none transition-all bg-white font-medium"
+                                                    />
+                                                </div>
+                                            </div>
+
+                                            {escrowEnabled && (
+                                                <div className="mt-4 bg-blue-100/50 p-2 rounded-lg border border-blue-200 text-center animate-in zoom-in-95 duration-200">
+                                                    <span className="text-sm font-bold text-blue-700">
+                                                        Escrow: {formatCurrency(effectiveExitValuation * (escrowPercent / 100))}
+                                                    </span>
+                                                </div>
+                                            )}
+                                        </div>
+
+                                        {/* R&W Reserve Card */}
+                                        <div className={`p-4 rounded-xl border transition-all ${rwReserveEnabled ? 'bg-red-50/30 border-red-200 shadow-sm' : 'bg-slate-50 border-slate-200 opacity-60'}`}>
+                                            <div className="flex items-center justify-between mb-3">
+                                                <div className="flex items-center gap-2">
+                                                    <div className={`p-1.5 rounded-lg ${rwReserveEnabled ? 'bg-red-100 text-red-600' : 'bg-slate-200 text-slate-400'}`}>
+                                                        <ShieldAlert className="w-4 h-4" />
+                                                    </div>
+                                                    <div>
+                                                        <div className="flex items-center gap-1.5">
+                                                            <h4 className="text-sm font-bold text-slate-800">R&W Reserve</h4>
+                                                            <Tooltip content="Réserve spécifique pour couvrir les risques liés aux Déclarations et Garanties (Representations & Warranties)." />
+                                                        </div>
+                                                        <p className="text-[10px] text-slate-500 leading-none mt-0.5">Representations & Warranties claims</p>
+                                                    </div>
+                                                </div>
+                                                <button
+                                                    onClick={() => setRwReserveEnabled(!rwReserveEnabled)}
+                                                    className={`w-9 h-5 rounded-full relative transition-colors duration-200 ${rwReserveEnabled ? 'bg-red-600' : 'bg-slate-300'}`}
+                                                >
+                                                    <div className={`w-3.5 h-3.5 bg-white rounded-full absolute top-[3px] transition-transform duration-200 shadow-sm ${rwReserveEnabled ? 'left-[19px]' : 'left-[3px]'}`} />
+                                                </button>
+                                            </div>
+
+                                            <div className="mt-4">
+                                                <label className="text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1 block">% Reserved for R&W</label>
+                                                <input
+                                                    type="number"
+                                                    value={rwReservePercent}
+                                                    onChange={(e) => setRwReservePercent(Number(e.target.value))}
+                                                    className="w-full text-sm py-2 px-3 border border-slate-200 rounded-lg focus:ring-2 focus:ring-red-100 outline-none transition-all bg-white font-medium"
+                                                />
+                                            </div>
+
+                                            {rwReserveEnabled && (
+                                                <div className="mt-4 bg-red-100/50 p-2 rounded-lg border border-red-200 text-center animate-in zoom-in-95 duration-200">
+                                                    <span className="text-sm font-bold text-red-700">
+                                                        Reserve: {formatCurrency(effectiveExitValuation * (rwReservePercent / 100))}
+                                                    </span>
+                                                </div>
+                                            )}
+                                        </div>
+
+                                        {/* NWC Adjustment Card */}
+                                        <div className={`p-4 rounded-xl border transition-all ${nwcEnabled ? 'bg-emerald-50/30 border-emerald-200 shadow-sm' : 'bg-slate-50 border-slate-200 opacity-60'}`}>
+                                            <div className="flex items-center justify-between mb-3">
+                                                <div className="flex items-center gap-2">
+                                                    <div className={`p-1.5 rounded-lg ${nwcEnabled ? 'bg-emerald-100 text-emerald-600' : 'bg-slate-200 text-slate-400'}`}>
+                                                        <BarChart3 className="w-4 h-4" />
+                                                    </div>
+                                                    <div>
+                                                        <div className="flex items-center gap-1.5">
+                                                            <h4 className="text-sm font-bold text-slate-800">Net Working Capital</h4>
+                                                            <Tooltip content="Ajustement lié à la différence entre le BFR réel à la clôture et un BFR cible défini dans le SPA." />
+                                                        </div>
+                                                        <p className="text-[10px] text-slate-500 leading-none mt-0.5">Adjust for NWC variance at closing</p>
+                                                    </div>
+                                                </div>
+                                                <button
+                                                    onClick={() => setNwcEnabled(!nwcEnabled)}
+                                                    className={`w-9 h-5 rounded-full relative transition-colors duration-200 ${nwcEnabled ? 'bg-emerald-600' : 'bg-slate-300'}`}
+                                                >
+                                                    <div className={`w-3.5 h-3.5 bg-white rounded-full absolute top-[3px] transition-transform duration-200 shadow-sm ${nwcEnabled ? 'left-[19px]' : 'left-[3px]'}`} />
+                                                </button>
+                                            </div>
+
+                                            <div className="grid grid-cols-2 gap-3 mt-4">
+                                                <div>
+                                                    <label className="text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1 block">Target NWC (SPA)</label>
+                                                    <FormattedNumberInput
+                                                        value={nwcTarget}
+                                                        onChange={setNwcTarget}
+                                                        className="w-full text-sm py-2 px-3 border border-slate-200 rounded-lg focus:ring-2 focus:ring-emerald-100 outline-none transition-all bg-white font-medium"
+                                                    />
+                                                </div>
+                                                <div>
+                                                    <label className="text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1 block">Actual NWC (Closing)</label>
+                                                    <FormattedNumberInput
+                                                        value={nwcActual}
+                                                        onChange={setNwcActual}
+                                                        className="w-full text-sm py-2 px-3 border border-slate-200 rounded-lg focus:ring-2 focus:ring-emerald-100 outline-none transition-all bg-white font-medium"
+                                                    />
+                                                </div>
+                                            </div>
+
+                                            {nwcEnabled && (
+                                                <div className="mt-4 bg-emerald-100/50 p-2 rounded-lg border border-emerald-200 text-center animate-in zoom-in-95 duration-200">
+                                                    <span className="text-sm font-bold text-emerald-700">
+                                                        Adjustment: {(nwcActual - nwcTarget) >= 0 ? '+' : ''}{formatCurrency(nwcActual - nwcTarget)} {(nwcActual - nwcTarget) >= 0 ? '(Seller bonus)' : '(Buyer discount)'}
+                                                    </span>
+                                                </div>
+                                            )}
+                                        </div>
+
+                                        {/* Calculation Summary Table Card */}
+                                        <div className="bg-slate-900 rounded-xl p-5 text-white shadow-xl shadow-slate-950/20">
+                                            <div className="flex items-center gap-2 mb-4 pb-3 border-b border-slate-800">
+                                                <ClipboardList className="w-4 h-4 text-slate-400" />
+                                                <h4 className="text-xs font-bold uppercase tracking-widest text-slate-300">Effective Proceeds Calculation</h4>
+                                            </div>
+
+                                            <div className="space-y-2.5">
+                                                <div className="flex justify-between items-center text-sm">
+                                                    <span className="text-slate-400">Exit Valuation</span>
+                                                    <span className="font-mono font-bold">{formatCurrency(effectiveExitValuation)}</span>
+                                                </div>
+
+                                                {escrowEnabled && (
+                                                    <div className="flex justify-between items-center text-sm">
+                                                        <span className="text-slate-400">- Escrow ({escrowPercent}%)</span>
+                                                        <span className="font-mono font-bold text-blue-400">-{formatCurrency(effectiveExitValuation * (escrowPercent / 100))}</span>
+                                                    </div>
+                                                )}
+
+                                                {rwReserveEnabled && (
+                                                    <div className="flex justify-between items-center text-sm">
+                                                        <span className="text-slate-400">- R&W Reserve ({rwReservePercent}%)</span>
+                                                        <span className="font-mono font-bold text-red-400">-{formatCurrency(effectiveExitValuation * (rwReservePercent / 100))}</span>
+                                                    </div>
+                                                )}
+
+                                                {nwcEnabled && (
+                                                    <div className="flex justify-between items-center text-sm">
+                                                        <span className="text-slate-400">{(nwcActual - nwcTarget) >= 0 ? '+ NWC Bonus' : '- NWC Discount'}</span>
+                                                        <span className={`font-mono font-bold ${(nwcActual - nwcTarget) >= 0 ? 'text-emerald-400' : 'text-red-400'}`}>
+                                                            {(nwcActual - nwcTarget) >= 0 ? '+' : ''}{formatCurrency(nwcActual - nwcTarget)}
+                                                        </span>
+                                                    </div>
+                                                )}
+
+                                                <div className="pt-3 border-t border-slate-800 flex justify-between items-end mt-2">
+                                                    <span className="text-xs font-bold uppercase tracking-wider text-slate-500">Distributable Proceeds</span>
+                                                    <div className="text-right">
+                                                        <div className="text-lg font-bold text-emerald-400 leading-tight">
+                                                            {formatCurrency(
+                                                                effectiveExitValuation
+                                                                - (escrowEnabled ? effectiveExitValuation * (escrowPercent / 100) : 0)
+                                                                - (rwReserveEnabled ? effectiveExitValuation * (rwReservePercent / 100) : 0)
+                                                                + (nwcEnabled ? (nwcActual - nwcTarget) : 0)
+                                                            )}
+                                                        </div>
+                                                    </div>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </div>
+                                )}
+                            </div>
+                        </>
                     </div>
-                </div>
+                )}
 
                 {/* Results Panel - Right Side */}
-                <div className="lg:col-span-2 space-y-4">
+                <div className={`${viewMode === 'waterfall' ? 'lg:col-span-2' : 'lg:col-span-3'} space-y-4`}>
                     {/* Header / Tab System */}
                     <div className="flex items-center justify-between border-b border-slate-200 pb-4">
                         <div className="flex items-center gap-4">
@@ -1030,15 +1031,22 @@ export const WaterfallView: React.FC<WaterfallViewProps> = ({
                                                                             const isPreference = calc.type === 'Preference';
                                                                             const isParticipation = calc.type === 'Participation' || calc.type === 'Catchup' || step.stepName.includes('Double Dip') || step.stepName.includes('Final');
                                                                             const isCarveOut = calc.type === 'CarveOut';
+                                                                            const isNWC = calc.type === 'NWC';
+                                                                            const isEscrow = calc.type === 'Escrow';
+                                                                            const isRW = calc.type === 'RWReserve';
+                                                                            const isMAAdjust = isNWC || isEscrow || isRW;
 
                                                                             return (
                                                                                 <>
                                                                                     {/* Summary Text */}
-                                                                                    <div className={`text-sm text-slate-600 p-3 rounded border italic flex justify-between items-start ${isCarveOut ? 'bg-amber-50/50 border-amber-100' : 'bg-blue-50/50 border-blue-100'}`}>
+                                                                                    <div className={`text-sm text-slate-600 p-3 rounded border italic flex justify-between items-start ${isCarveOut || isMAAdjust ? 'bg-amber-50/50 border-amber-100' : 'bg-blue-50/50 border-blue-100'}`}>
                                                                                         <span>
                                                                                             {isPreference && `Priority payout for ${calc.shareClass || 'investors'} based on their liquidation preference terms.`}
                                                                                             {isParticipation && `Distribution of proceeds to ${calc.shareClass || 'eligible shareholders'} based on pro-rata ownership.`}
                                                                                             {isCarveOut && `Management Carve-Out bonus deducted from the exit proceeds.`}
+                                                                                            {isNWC && `Adjustment to the sale price based on the difference between Target and Actual Net Working Capital at closing.`}
+                                                                                            {isEscrow && `Funds placed in a restricted account (Escrow) to cover potential future indemnification claims.`}
+                                                                                            {isRW && `Reserve set aside to cover potential Representations & Warranties insurance/claims.`}
                                                                                         </span>
                                                                                     </div>
 
@@ -1065,6 +1073,15 @@ export const WaterfallView: React.FC<WaterfallViewProps> = ({
                                                                                                     )}
                                                                                                     {calc.totalParticipatingShares !== undefined && (
                                                                                                         <li><span className="font-medium">Pro-rata Pool (Total):</span> {calc.totalParticipatingShares.toLocaleString()} shares</li>
+                                                                                                    )}
+                                                                                                    {isNWC && (
+                                                                                                        <>
+                                                                                                            <li><span className="font-medium">Target NWC:</span> {formatCurrency(calc.targetNWC || 0)}</li>
+                                                                                                            <li><span className="font-medium">Actual NWC:</span> {formatCurrency(calc.actualNWC || 0)}</li>
+                                                                                                        </>
+                                                                                                    )}
+                                                                                                    {(isEscrow || isRW) && (
+                                                                                                        <li><span className="font-medium">Percentage:</span> {calc.percentage}%</li>
                                                                                                     )}
                                                                                                 </ul>
                                                                                             </div>
@@ -1097,6 +1114,22 @@ export const WaterfallView: React.FC<WaterfallViewProps> = ({
                                                                                                         <div className="text-[10px] text-slate-400 uppercase tracking-tighter">CARVE-OUT = EXIT VALUE × %</div>
                                                                                                         <div className="text-amber-600 font-bold">
                                                                                                             = {formatCurrency(effectiveExitValuation)} × {carveOutPercent}%
+                                                                                                        </div>
+                                                                                                    </>
+                                                                                                )}
+                                                                                                {isNWC && (
+                                                                                                    <>
+                                                                                                        <div className="text-[10px] text-slate-400 uppercase tracking-tighter">ADJUSTMENT = ACTUAL - TARGET</div>
+                                                                                                        <div className="text-amber-600 font-bold">
+                                                                                                            = {formatCurrency(calc.actualNWC || 0)} - {formatCurrency(calc.targetNWC || 0)}
+                                                                                                        </div>
+                                                                                                    </>
+                                                                                                )}
+                                                                                                {(isEscrow || isRW) && (
+                                                                                                    <>
+                                                                                                        <div className="text-[10px] text-slate-400 uppercase tracking-tighter">HOLD = EXIT VALUE × %</div>
+                                                                                                        <div className="text-amber-600 font-bold">
+                                                                                                            = {formatCurrency(effectiveExitValuation)} × {calc.percentage}%
                                                                                                         </div>
                                                                                                     </>
                                                                                                 )}

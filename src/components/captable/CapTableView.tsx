@@ -113,6 +113,19 @@ export const CapTableView: React.FC<CapTableViewProps> = ({ capTable, setCapTabl
         setIsOptionPoolsCollapsed(false);
     };
 
+    // 5. Hide Option Pool section if no pool exists
+    const hasOptionPool = (calculationResult.totalPoolShares || 0) > 0 || effectiveCapTable.optionGrants.length > 0;
+
+    // Check if there are any convertibles to simulate
+    const hasConvertibles = convertibleRounds.length > 0 || (capTable.convertibles && capTable.convertibles.length > 0);
+
+    // Auto-disable pro-forma if no convertibles
+    React.useEffect(() => {
+        if (!hasConvertibles && isProForma) {
+            setIsProForma(false);
+        }
+    }, [hasConvertibles]);
+
     return (
         <div className="space-y-8">
             {/* 1. Funding Rounds (Priority) */}
@@ -127,8 +140,8 @@ export const CapTableView: React.FC<CapTableViewProps> = ({ capTable, setCapTabl
             </div>
 
             {/* 2. Configuration (Shareholders & Option Pools) */}
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
-                <div>
+            <div className={`grid grid-cols-1 ${hasOptionPool ? 'lg:grid-cols-2' : ''} gap-8`}>
+                <div className={hasOptionPool ? '' : 'lg:col-span-2'}>
                     <ShareholderManager
                         shareholders={capTable.shareholders}
                         onUpdate={updateShareholders}
@@ -136,55 +149,59 @@ export const CapTableView: React.FC<CapTableViewProps> = ({ capTable, setCapTabl
                         onToggleCollapse={() => setIsShareholdersCollapsed(!isShareholdersCollapsed)}
                     />
                 </div>
-                <div>
-                    <OptionPoolManager
-                        capTable={capTable}
-                        onUpdate={updateOptionGrants}
-                        onUpdateRounds={updateRounds}
-                        onUpdateShareholders={updateShareholders}
-                        onCapTableUpdate={setCapTable}
-                        isCollapsed={isOptionPoolsCollapsed}
-                        onToggleCollapse={() => setIsOptionPoolsCollapsed(!isOptionPoolsCollapsed)}
-                    />
-                </div>
+                {hasOptionPool && (
+                    <div>
+                        <OptionPoolManager
+                            capTable={capTable}
+                            onUpdate={updateOptionGrants}
+                            onUpdateRounds={updateRounds}
+                            onUpdateShareholders={updateShareholders}
+                            onCapTableUpdate={setCapTable}
+                            isCollapsed={isOptionPoolsCollapsed}
+                            onToggleCollapse={() => setIsOptionPoolsCollapsed(!isOptionPoolsCollapsed)}
+                        />
+                    </div>
+                )}
             </div>
 
             {/* Pro-Forma & Convertible Controls */}
             <div className="space-y-4">
                 {/* Simulation Control Panel */}
-                <div className="bg-slate-900 rounded-xl p-4 flex flex-col md:flex-row md:items-center justify-between gap-4 shadow-lg ring-1 ring-slate-800">
-                    <div className="flex items-center gap-4 cursor-pointer group" onClick={() => setIsProForma(!isProForma)}>
-                        <div className={`w-12 h-7 rounded-full transition-colors relative flex-shrink-0 ${isProForma ? 'bg-blue-600' : 'bg-slate-700 group-hover:bg-slate-600'}`}>
-                            <div className={`absolute top-1 bottom-1 w-5 h-5 bg-white rounded-full transition-all shadow-sm ${isProForma ? 'left-6' : 'left-1'}`} />
-                        </div>
-                        <div>
-                            <h3 className="text-white font-bold text-sm flex items-center gap-2">
-                                Simulate Conversions
-                                {isProForma && <span className="text-[10px] bg-blue-500/20 text-blue-300 px-1.5 py-0.5 rounded border border-blue-500/30">ON</span>}
-                            </h3>
-                            <p className="text-slate-400 text-xs">See impact of SAFEs & Notes at next round</p>
-                        </div>
-                    </div>
-
-                    {isProForma && (
-                        <div className="flex items-center gap-4 animate-in fade-in slide-in-from-right-4 duration-300">
-                            <div className="text-right">
-                                <label className="block text-slate-400 text-[10px] font-bold uppercase tracking-wider mb-1.5 flex items-center justify-end gap-1">
-                                    Assumed Pre-Money Val.
-                                    <AlertCircle className="w-3 h-3 text-slate-500" />
-                                </label>
-                                <div className="w-48">
-                                    <FormattedNumberInput
-                                        value={proFormaValuation}
-                                        onChange={setProFormaValuation}
-                                        prefix="$"
-                                        className="bg-slate-800 border-slate-700 text-white font-mono text-sm shadow-inner focus:ring-blue-500/50 focus:border-blue-500"
-                                    />
-                                </div>
+                {hasConvertibles && (
+                    <div className="bg-slate-900 rounded-xl p-4 flex flex-col md:flex-row md:items-center justify-between gap-4 shadow-lg ring-1 ring-slate-800">
+                        <div className="flex items-center gap-4 cursor-pointer group" onClick={() => setIsProForma(!isProForma)}>
+                            <div className={`w-12 h-7 rounded-full transition-colors relative flex-shrink-0 ${isProForma ? 'bg-blue-600' : 'bg-slate-700 group-hover:bg-slate-600'}`}>
+                                <div className={`absolute top-1 bottom-1 w-5 h-5 bg-white rounded-full transition-all shadow-sm ${isProForma ? 'left-6' : 'left-1'}`} />
+                            </div>
+                            <div>
+                                <h3 className="text-white font-bold text-sm flex items-center gap-2">
+                                    Simulate Conversions
+                                    {isProForma && <span className="text-[10px] bg-blue-500/20 text-blue-300 px-1.5 py-0.5 rounded border border-blue-500/30">ON</span>}
+                                </h3>
+                                <p className="text-slate-400 text-xs">See impact of SAFEs & Notes at next round</p>
                             </div>
                         </div>
-                    )}
-                </div>
+
+                        {isProForma && (
+                            <div className="flex items-center gap-4 animate-in fade-in slide-in-from-right-4 duration-300">
+                                <div className="text-right">
+                                    <label className="block text-slate-400 text-[10px] font-bold uppercase tracking-wider mb-1.5 flex items-center justify-end gap-1">
+                                        Assumed Pre-Money Val.
+                                        <AlertCircle className="w-3 h-3 text-slate-500" />
+                                    </label>
+                                    <div className="w-48">
+                                        <FormattedNumberInput
+                                            value={proFormaValuation}
+                                            onChange={setProFormaValuation}
+                                            className="bg-slate-800 border-slate-700 text-emerald-400 font-mono text-sm shadow-inner focus:ring-blue-500/50 focus:border-blue-500"
+                                            prefix={<span className="text-emerald-500">$</span>}
+                                        />
+                                    </div>
+                                </div>
+                            </div>
+                        )}
+                    </div>
+                )}
 
                 <div className={`bg-white rounded-xl border shadow-sm overflow-hidden transition-all duration-500 ${isProForma ? 'border-blue-300 ring-4 ring-blue-500/10' : 'border-slate-200'}`}>
                     <div className="px-6 py-4 border-b border-slate-200 bg-slate-50 flex flex-col md:flex-row md:items-center justify-between gap-4">

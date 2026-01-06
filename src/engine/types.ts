@@ -237,7 +237,10 @@ export interface WaterfallStep {
             pricePerShare?: number;
             preferenceMultiple?: number;
             totalShares?: number;
-            type?: 'Preference' | 'CarveOut' | 'Participation' | 'Catchup';
+            type?: 'Preference' | 'CarveOut' | 'Participation' | 'Catchup' | 'NWC' | 'Escrow' | 'RWReserve';
+            targetNWC?: number;
+            actualNWC?: number;
+            percentage?: number;
             shareClass?: string;
             isParticipating?: boolean;
             participationCap?: number;

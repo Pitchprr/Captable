@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useMemo } from 'react';
 import type { EarnoutConfig, Shareholder, CapTableSummaryItem } from '../../engine/types';
 import { ChevronDown, ChevronRight } from 'lucide-react';
 import { GeneralParams } from './GeneralParams';
@@ -18,30 +18,42 @@ export function EarnoutView({ config, onChange, shareholders, capTableSummary }:
     const [openSection, setOpenSection] = useState<string | null>('params');
 
     // Calculate progress based on filled fields
-    const calculateProgress = () => {
-        let filledSections = 0;
-        const totalSections = 5;
+    const { progress, filledCount } = useMemo(() => {
+        let count = 0;
 
-        // Check if general params are filled
-        if (config.generalParams.enterpriseValue > 0 && config.generalParams.closingDate) {
-            filledSections++;
+        // 1. Paramètres (Params) - Check essentials
+        if (config.generalParams.enterpriseValue > 0 &&
+            config.generalParams.upfrontPayment > 0 &&
+            config.generalParams.closingDate &&
+            config.generalParams.duration > 0) {
+            count++;
         }
 
-        // Check if payment structure is configured
+        // 2. Versement (Payment) - Check if type is selected
         if (config.paymentStructure.type) {
-            filledSections++;
+            count++;
         }
 
-        // Check if beneficiaries are configured (always true as it has defaults)
-        filledSections++;
+        // 3. Bénéficiaires (Beneficiaries) - Check if method is selected
+        if (config.beneficiaries.method) {
+            count++;
+        }
 
-        // Check if clauses are configured (always true as it has defaults)
-        filledSections++;
+        // 4. Clauses - Usually filled by default, but verify object presence
+        if (config.clauses && Object.keys(config.clauses).length > 0) {
+            count++;
+        }
 
-        return Math.round((filledSections / totalSections) * 100);
-    };
+        // 5. Simulation - Check if global achievement is defined
+        if (config.simulation && typeof config.simulation.globalAchievementPercent === 'number') {
+            count++;
+        }
 
-    const progress = calculateProgress();
+        return {
+            progress: Math.round((count / 5) * 100),
+            filledCount: count
+        };
+    }, [config]);
 
     const CURRENCY_SYMBOLS: Record<string, string> = {
         EUR: '€',
@@ -131,23 +143,14 @@ export function EarnoutView({ config, onChange, shareholders, capTableSummary }:
 
     return (
         <div className="space-y-6 animate-in fade-in duration-500">
-            {/* Breadcrumb */}
-            <div className="flex items-center text-sm text-slate-500 space-x-2">
-                <span className="hover:text-slate-700 cursor-pointer">Captable</span>
-                <span>&gt;</span>
-                <span className="hover:text-slate-700 cursor-pointer">Waterfall</span>
-                <span>&gt;</span>
-                <span className="font-semibold text-blue-600 bg-blue-50 px-2 py-0.5 rounded-md">Earn-out</span>
-                <span>&gt;</span>
-                <span className="text-slate-400">Résultats</span>
-            </div>
+
 
             {/* Progress Bar */}
             <div className="bg-white p-6 rounded-xl border border-slate-200 shadow-sm">
                 <div className="flex justify-between items-center mb-3">
-                    <h3 className="font-semibold text-slate-700">Configuration à {progress}%</h3>
+                    <h3 className="font-semibold text-slate-700">Configuration complétée à {progress}%</h3>
                     <span className="text-xs font-medium text-slate-500 bg-slate-100 px-2 py-1 rounded-full">
-                        Étape {sections.findIndex(s => s.id === openSection) + 1}/5
+                        {filledCount}/5 étapes configurées
                     </span>
                 </div>
                 <div className="w-full bg-slate-100 rounded-full h-2.5 overflow-hidden">
