@@ -139,9 +139,9 @@ export const CapTableView: React.FC<CapTableViewProps> = ({ capTable, setCapTabl
                 />
             </div>
 
-            {/* 2. Configuration (Shareholders & Option Pools) */}
-            <div className={`grid grid-cols-1 ${hasOptionPool ? 'lg:grid-cols-2' : ''} gap-8`}>
-                <div className={hasOptionPool ? '' : 'lg:col-span-2'}>
+            {/* 2. Configuration & Charts (Shareholders & Ownership Distribution) */}
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
+                <div>
                     <ShareholderManager
                         shareholders={capTable.shareholders}
                         onUpdate={updateShareholders}
@@ -149,20 +149,25 @@ export const CapTableView: React.FC<CapTableViewProps> = ({ capTable, setCapTabl
                         onToggleCollapse={() => setIsShareholdersCollapsed(!isShareholdersCollapsed)}
                     />
                 </div>
-                {hasOptionPool && (
-                    <div>
-                        <OptionPoolManager
-                            capTable={capTable}
-                            onUpdate={updateOptionGrants}
-                            onUpdateRounds={updateRounds}
-                            onUpdateShareholders={updateShareholders}
-                            onCapTableUpdate={setCapTable}
-                            isCollapsed={isOptionPoolsCollapsed}
-                            onToggleCollapse={() => setIsOptionPoolsCollapsed(!isOptionPoolsCollapsed)}
-                        />
-                    </div>
-                )}
+                <div>
+                    <CapTableCharts capTable={effectiveCapTable} />
+                </div>
             </div>
+
+            {/* 3. Option Pool Management (Conditional) */}
+            {hasOptionPool && (
+                <div className="w-full">
+                    <OptionPoolManager
+                        capTable={capTable}
+                        onUpdate={updateOptionGrants}
+                        onUpdateRounds={updateRounds}
+                        onUpdateShareholders={updateShareholders}
+                        onCapTableUpdate={setCapTable}
+                        isCollapsed={isOptionPoolsCollapsed}
+                        onToggleCollapse={() => setIsOptionPoolsCollapsed(!isOptionPoolsCollapsed)}
+                    />
+                </div>
+            )}
 
             {/* Pro-Forma & Convertible Controls */}
             <div className="space-y-4">
@@ -524,8 +529,7 @@ export const CapTableView: React.FC<CapTableViewProps> = ({ capTable, setCapTabl
                 </div>
             </div>
 
-            {/* Cap Table Charts */}
-            <CapTableCharts capTable={effectiveCapTable} />
+
         </div >
     );
 };
