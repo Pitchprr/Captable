@@ -113,6 +113,8 @@ export const WaterfallView: React.FC<WaterfallViewProps> = ({
         [capTable, effectiveExitValuation, preferences, maConfig]
     );
 
+
+
     // Multi-Exit Scenarios Calculation (Dynamic)
     const multiScenarioData = useMemo(() => {
         if (sensitivityAnalysisEnabled) return [];
@@ -216,6 +218,8 @@ export const WaterfallView: React.FC<WaterfallViewProps> = ({
                                     className="flex h-10 w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all duration-200"
                                 />
                             </div>
+
+
 
                             {/* Earn-out Visual Decomposition */}
                             {earnoutEnabled && earnoutUpfront > 0 && (
@@ -1021,77 +1025,88 @@ export const WaterfallView: React.FC<WaterfallViewProps> = ({
                                                                         Calculation Details
                                                                     </div>
                                                                     <div className="space-y-4">
-                                                                        {step.stepName.includes('Liquidation Preference') && (() => {
-                                                                            const linkedRound = capTable.rounds.find(r => step.stepName.toLowerCase().includes(r.name.toLowerCase()));
-                                                                            const multiple = linkedRound?.liquidationPreferenceMultiple || 1;
-                                                                            const isParticipating = linkedRound?.isParticipating || false;
+                                                                        {step.details?.calculation && (() => {
+                                                                            const calc = step.details.calculation;
+                                                                            const isPreference = calc.type === 'Preference';
+                                                                            const isParticipation = calc.type === 'Participation' || calc.type === 'Catchup' || step.stepName.includes('Double Dip') || step.stepName.includes('Final');
+                                                                            const isCarveOut = calc.type === 'CarveOut';
+
                                                                             return (
                                                                                 <>
-                                                                                    <div className="text-sm text-slate-600 bg-blue-50/50 p-3 rounded border border-blue-100 italic flex justify-between items-start">
-                                                                                        <span>"Priority payout for <strong>{linkedRound ? linkedRound.name : 'Investors'}</strong> based on their investment terms."</span>
+                                                                                    {/* Summary Text */}
+                                                                                    <div className={`text-sm text-slate-600 p-3 rounded border italic flex justify-between items-start ${isCarveOut ? 'bg-amber-50/50 border-amber-100' : 'bg-blue-50/50 border-blue-100'}`}>
+                                                                                        <span>
+                                                                                            {isPreference && `Priority payout for ${calc.shareClass || 'investors'} based on their liquidation preference terms.`}
+                                                                                            {isParticipation && `Distribution of proceeds to ${calc.shareClass || 'eligible shareholders'} based on pro-rata ownership.`}
+                                                                                            {isCarveOut && `Management Carve-Out bonus deducted from the exit proceeds.`}
+                                                                                        </span>
                                                                                     </div>
+
                                                                                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-xs">
-                                                                                        <div>
-                                                                                            <span className="font-bold text-slate-500 uppercase block mb-1">Round Settings ({linkedRound?.name || 'Unknown'})</span>
-                                                                                            <ul className="space-y-1 text-slate-700 list-disc pl-4">
-                                                                                                <li><span className="font-medium">Total Invested:</span> {linkedRound?.investments ? formatCurrency(linkedRound.investments.reduce((sum, inv) => sum + inv.amount, 0)) : '-'}</li>
-                                                                                                <li><span className="font-medium">Pref Multiple:</span> <span className="text-blue-600 font-bold">{multiple}x</span></li>
-                                                                                                <li><span className="font-medium">Participation:</span> {isParticipating ? 'Yes (Double Dip)' : 'No (Standard)'}</li>
-                                                                                                <li><span className="font-medium">Cap:</span> No Cap</li>
-                                                                                            </ul>
+                                                                                        {/* Left Column: Key Parameters */}
+                                                                                        <div className="space-y-3">
+                                                                                            <div>
+                                                                                                <span className="font-bold text-slate-500 uppercase block mb-1">Terms & Parameters</span>
+                                                                                                <ul className="space-y-1 text-slate-700 list-disc pl-4">
+                                                                                                    {calc.investedAmount !== undefined && (
+                                                                                                        <li><span className="font-medium">Amount Invested:</span> {formatCurrency(calc.investedAmount)}</li>
+                                                                                                    )}
+                                                                                                    {calc.preferenceMultiple !== undefined && (
+                                                                                                        <li><span className="font-medium">Preference Multiple:</span> <span className="text-blue-600 font-bold">{calc.preferenceMultiple}x</span></li>
+                                                                                                    )}
+                                                                                                    {calc.isParticipating !== undefined && (
+                                                                                                        <li><span className="font-medium">Participating:</span> {calc.isParticipating ? 'Yes (Double Dip)' : 'No (Standard)'}</li>
+                                                                                                    )}
+                                                                                                    {calc.participationCap !== undefined && calc.participationCap > 0 && (
+                                                                                                        <li><span className="font-medium">Participation Cap:</span> {calc.participationCap}x</li>
+                                                                                                    )}
+                                                                                                    {calc.totalShares !== undefined && (
+                                                                                                        <li><span className="font-medium">Basis (Shares):</span> {calc.totalShares.toLocaleString()}</li>
+                                                                                                    )}
+                                                                                                    {calc.totalParticipatingShares !== undefined && (
+                                                                                                        <li><span className="font-medium">Pro-rata Pool (Total):</span> {calc.totalParticipatingShares.toLocaleString()} shares</li>
+                                                                                                    )}
+                                                                                                </ul>
+                                                                                            </div>
                                                                                         </div>
+
+                                                                                        {/* Right Column: Applied Logic / Math */}
                                                                                         <div>
                                                                                             <span className="font-bold text-slate-500 uppercase block mb-1">Applied Math</span>
-                                                                                            <div className="font-mono bg-slate-50 p-2 rounded border border-slate-200 text-slate-600 space-y-1">
-                                                                                                <div>PAYOUT = INVESTMENT × MULTIPLE</div>
-                                                                                                {linkedRound && (
-                                                                                                    <div className="text-blue-600 font-bold">
-                                                                                                        = {formatCurrency(linkedRound.investments.reduce((sum, inv) => sum + inv.amount, 0))} × {multiple}
-                                                                                                    </div>
+                                                                                            <div className="font-mono bg-slate-50 p-2 rounded border border-slate-200 text-slate-600 space-y-2">
+                                                                                                {isPreference && (
+                                                                                                    <>
+                                                                                                        <div className="text-[10px] text-slate-400 uppercase tracking-tighter">PAYOUT = INVESTMENT × MULTIPLE</div>
+                                                                                                        <div className="text-blue-600 font-bold">
+                                                                                                            = {formatCurrency(calc.investedAmount || 0)} × {calc.preferenceMultiple || 1}
+                                                                                                        </div>
+                                                                                                    </>
                                                                                                 )}
+                                                                                                {isParticipation && (
+                                                                                                    <>
+                                                                                                        <div className="text-[10px] text-slate-400 uppercase tracking-tighter">PRO-RATA = (CLASS SHARES / TOTAL POOL SHARES) × PROCEEDS</div>
+                                                                                                        <div className="text-blue-600 font-bold">
+                                                                                                            = ({calc.totalShares?.toLocaleString() || '0'} / {calc.totalParticipatingShares?.toLocaleString() || '0'})
+                                                                                                            {calc.totalShares && calc.totalParticipatingShares && ` (${((calc.totalShares / calc.totalParticipatingShares) * 100).toFixed(2)}%)`}
+                                                                                                        </div>
+                                                                                                        {step.amount > 0 && <div className="text-emerald-600 font-bold">× {formatCurrency(calc.distributableAmount || step.amount)}</div>}
+                                                                                                    </>
+                                                                                                )}
+                                                                                                {isCarveOut && (
+                                                                                                    <>
+                                                                                                        <div className="text-[10px] text-slate-400 uppercase tracking-tighter">CARVE-OUT = EXIT VALUE × %</div>
+                                                                                                        <div className="text-amber-600 font-bold">
+                                                                                                            = {formatCurrency(effectiveExitValuation)} × {carveOutPercent}%
+                                                                                                        </div>
+                                                                                                    </>
+                                                                                                )}
+                                                                                                {calc.formula && <div className="text-[10px] mt-2 italic border-t pt-1 border-slate-200">{calc.formula}</div>}
                                                                                             </div>
                                                                                         </div>
                                                                                     </div>
                                                                                 </>
                                                                             );
                                                                         })()}
-
-                                                                        {(step.stepName.includes('Participation') || step.stepName.includes('Common') || step.stepName.includes('Catch-up') || step.stepName.includes('Double Dip')) && (
-                                                                            <>
-                                                                                <div className="text-sm text-slate-600 bg-blue-50/50 p-3 rounded border border-blue-100 italic">
-                                                                                    "Distribution of remaining proceeds ({formatCurrency(step.amount)}) to all eligible shareholders based on ownership %."
-                                                                                </div>
-                                                                                <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-xs">
-                                                                                    <div>
-                                                                                        <span className="font-bold text-slate-500 uppercase block mb-1">Key Parameters</span>
-                                                                                        <ul className="space-y-1 text-slate-700 list-disc pl-4">
-                                                                                            <li><span className="font-medium">Allocated Amount:</span> {formatCurrency(step.amount)}</li>
-                                                                                            <li><span className="font-medium">Basis:</span> Fully Diluted Ownership</li>
-                                                                                        </ul>
-                                                                                    </div>
-                                                                                    <div>
-                                                                                        <span className="font-bold text-slate-500 uppercase block mb-1">Concept</span>
-                                                                                        <div className="font-mono bg-slate-50 p-2 rounded border border-slate-200 text-slate-600">
-                                                                                            Shareholder Payout = Step Amount × (Individual Shares / Total FD Shares)
-                                                                                        </div>
-                                                                                    </div>
-                                                                                </div>
-                                                                            </>
-                                                                        )}
-
-                                                                        {step.stepName.includes('Carve') && (
-                                                                            <>
-                                                                                <div className="text-sm text-slate-600 bg-amber-50/50 p-3 rounded border border-amber-100 italic">
-                                                                                    "Management Carve-Out bonus deducted from the top."
-                                                                                </div>
-                                                                                <div className="text-xs">
-                                                                                    <span className="font-bold text-slate-500 uppercase block mb-1">Calculation</span>
-                                                                                    <div className="font-mono bg-slate-50 p-2 rounded border border-slate-200 text-slate-600">
-                                                                                        {formatCurrency(effectiveExitValuation)} (Exit Val) × {carveOutPercent}%
-                                                                                    </div>
-                                                                                </div>
-                                                                            </>
-                                                                        )}
                                                                     </div>
                                                                 </div>
                                                             )}

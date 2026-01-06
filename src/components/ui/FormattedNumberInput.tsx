@@ -8,6 +8,8 @@ interface FormattedNumberInputProps {
     placeholder?: string;
     min?: number;
     max?: number;
+    prefix?: React.ReactNode;
+    suffix?: React.ReactNode;
 }
 
 export function FormattedNumberInput({
@@ -16,7 +18,9 @@ export function FormattedNumberInput({
     className = '',
     placeholder = '',
     min,
-    max
+    max,
+    prefix,
+    suffix
 }: FormattedNumberInputProps) {
     const [displayValue, setDisplayValue] = useState<string>(formatNumber(value));
     const [isFocused, setIsFocused] = useState(false);
@@ -85,17 +89,41 @@ export function FormattedNumberInput({
         }
     }, [value, isFocused]);
 
-    return (
+    const inputElement = (
         <input
             ref={inputRef}
             type="text"
-            inputMode="decimal"
+            inputMode="decimal" // Better mobile keyboard
             value={displayValue}
             onFocus={handleFocus}
             onBlur={handleBlur}
             onChange={handleChange}
-            className={className}
+            className={`w-full px-3 py-2 bg-white border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-all ${className} ${prefix ? 'pl-8' : ''} ${suffix ? 'pr-8' : ''}`}
             placeholder={placeholder}
         />
     );
+
+    if (prefix || suffix) {
+        return (
+            <div className="relative group">
+                {prefix && (
+                    <div className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 font-medium pointer-events-none group-focus-within:text-blue-500 transition-colors">
+                        {prefix}
+                    </div>
+                )}
+                {inputElement}
+                {suffix && (
+                    <div className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 font-medium pointer-events-none group-focus-within:text-blue-500 transition-colors">
+                        {suffix}
+                    </div>
+                )}
+            </div>
+        );
+    }
+
+    // Default: just render the input to avoid breaking layouts that expect input as direct child
+    // Note: If usage provided custom className that includes width/padding, this might override it.
+    // We added default classes above, which merges with custom className.
+    // Ideally we should use a utility like cn() or explicit merging, but string concat is fine for now.
+    return inputElement;
 }

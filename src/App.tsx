@@ -541,18 +541,55 @@ function App() {
           </p>
         )}
 
-        <div className={`px-6 py-4 border-b border-slate-800 space-y-4 ${isSidebarCollapsed ? 'hidden' : 'block'}`}>
-          <div>
-            <p className="text-xs text-slate-400 uppercase font-semibold mb-1">Total Raised</p>
-            <p className="text-xl font-bold text-blue-400">
-              ${(capTable.rounds.reduce((acc, round) => acc + round.investments.reduce((iAcc, inv) => iAcc + inv.amount, 0), 0) / 1000000).toFixed(1)}M
-            </p>
+        <div className={`px-6 py-4 border-b border-slate-800 space-y-5 ${isSidebarCollapsed ? 'hidden' : 'block'}`}>
+          <div className="flex items-center justify-between group">
+            <div>
+              <p className="text-[10px] text-slate-500 uppercase font-bold tracking-wider mb-1">Total Raised</p>
+              <p className="text-xl font-extrabold text-blue-400">
+                ${(capTable.rounds.reduce((acc, round) => acc + round.investments.reduce((iAcc, inv) => iAcc + inv.amount, 0), 0) / 1000000).toFixed(1)}M
+              </p>
+            </div>
+            <div className="text-right">
+              <p className="text-[10px] text-slate-500 uppercase font-bold tracking-wider mb-1">Valuation</p>
+              <p className="text-xl font-extrabold text-green-400">
+                ${(postMoneyValuation / 1000000).toFixed(1)}M
+              </p>
+            </div>
           </div>
-          <div>
-            <p className="text-xs text-slate-400 uppercase font-semibold mb-1">Current Valuation</p>
-            <p className="text-xl font-bold text-green-400">
-              ${(postMoneyValuation / 1000000).toFixed(1)}M
-            </p>
+
+          <div className="pt-4 border-t border-slate-800/50 space-y-4">
+            <div>
+              <div className="flex justify-between items-end mb-1">
+                <p className="text-[10px] text-slate-500 uppercase font-bold tracking-wider">Total Shares (FD)</p>
+                <p className="text-xs font-mono font-bold text-slate-300">{capTableState.totalSharesOutstanding.toLocaleString()}</p>
+              </div>
+            </div>
+
+            <div>
+              <div className="flex justify-between items-end mb-1">
+                <p className="text-[10px] text-slate-500 uppercase font-bold tracking-wider">Option Pool</p>
+                <p className="text-[10px] font-mono font-bold text-blue-400">
+                  {Math.round((capTable.optionGrants.reduce((sum, g) => sum + g.shares, 0) / (capTableState.totalPoolShares || 1)) * 100)}% Granted
+                </p>
+              </div>
+              <div className="h-1 bg-slate-800 rounded-full overflow-hidden flex">
+                <div
+                  className="h-full bg-blue-500"
+                  style={{ width: `${(capTable.optionGrants.reduce((sum, g) => sum + g.shares, 0) / (capTableState.totalPoolShares || 1)) * 100}%` }}
+                />
+              </div>
+              <div className="flex justify-between mt-1">
+                <span className="text-[9px] text-slate-500">Granted: <span className="text-slate-300">{capTable.optionGrants.reduce((sum, g) => sum + g.shares, 0).toLocaleString()}</span></span>
+                <span className="text-[9px] text-slate-500">Available: <span className="text-slate-300">{Math.max(0, capTableState.totalPoolShares - capTable.optionGrants.reduce((sum, g) => sum + g.shares, 0)).toLocaleString()}</span></span>
+              </div>
+            </div>
+
+            <div className="flex justify-between items-center">
+              <p className="text-[10px] text-slate-500 uppercase font-bold tracking-wider">Funding Rounds</p>
+              <div className="px-2 py-0.5 bg-slate-800 rounded text-[10px] font-bold text-slate-300">
+                {capTable.rounds.filter(r => !r.investmentType || r.investmentType === 'Equity').length - 1} Post-Creation
+              </div>
+            </div>
           </div>
         </div>
 

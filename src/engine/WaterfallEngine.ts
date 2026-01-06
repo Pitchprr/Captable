@@ -1,5 +1,5 @@
 import type { CapTable, LiquidationPreference, WaterfallPayout, WaterfallConfig, WaterfallStep, WaterfallResult } from './types';
-import { calculateCapTableState } from './CapTableEngine';
+import { calculateCapTableState, calculateInstrumentShares } from './CapTableEngine';
 
 export const calculateWaterfall = (
     capTable: CapTable,
@@ -8,7 +8,66 @@ export const calculateWaterfall = (
     config: WaterfallConfig = { carveOutPercent: 0, carveOutBeneficiary: 'everyone', payoutStructure: 'standard' }
 ): WaterfallResult => {
 
-    const { summary } = calculateCapTableState(capTable);
+    // 1. Get Base State
+    const { summary: baseSummary, totalSharesOutstanding: baseTotalShares } = calculateCapTableState(capTable);
+
+    // 2. Process Convertibles (Pro-Forma Calculation for Exit)
+    // We treat the Exit Valuation as the "Next Round Valuation" for conversion purposes
+    const summaryMap = new Map(baseSummary.map(s => [s.shareholderId, { ...s, sharesByClass: { ...s.sharesByClass } }]));
+
+    // Virtual Class name for converted instruments
+    const CONVERTIBLE_CLASS = 'Convertible (Simulated)';
+    let totalConvertibleShares = 0;
+
+    if (capTable.convertibles && capTable.convertibles.length > 0) {
+        capTable.convertibles.forEach(inst => {
+            if (inst.isConverted) return;
+
+            // Calculate shares based on Exit Valuation
+            const newShares = calculateInstrumentShares(
+                inst,
+                new Date().toISOString().split('T')[0], // Trigger now
+                exitValuation,
+                baseTotalShares
+            );
+
+            if (newShares > 0) {
+                totalConvertibleShares += newShares;
+
+                // Add to shareholder summary
+                let shareholder = summaryMap.get(inst.investorId);
+                if (!shareholder) {
+                    // Create simulated shareholder if they don't exist in equity captable yet
+                    shareholder = {
+                        shareholderId: inst.investorId,
+                        shareholderName: 'Simulated Investor', // We don't have the name easily accessible here if not in shareholders list
+                        role: 'Angel', // Default role
+                        totalShares: 0,
+                        totalOptions: 0,
+                        ownershipPercentage: 0,
+                        ownershipPercentageNonDiluted: 0,
+                        totalInvested: 0,
+                        currentValue: 0,
+                        optionsValue: 0,
+                        sharesByClass: {},
+                        optionsByPool: {}
+                    };
+                    summaryMap.set(inst.investorId, shareholder);
+                }
+
+                // Update shares
+                shareholder.totalShares += newShares;
+                shareholder.sharesByClass[CONVERTIBLE_CLASS] = (shareholder.sharesByClass[CONVERTIBLE_CLASS] || 0) + newShares;
+
+                // Add investment amount to totalInvested to track ROI
+                shareholder.totalInvested += (inst.amount || 0);
+            }
+        });
+    }
+
+    const summary = Array.from(summaryMap.values());
+    // Removed unused totalSharesWithConvertibles
+
     const steps: WaterfallStep[] = [];
     let stepNumber = 0;
 
@@ -63,7 +122,7 @@ export const calculateWaterfall = (
             preferencePayout: 0,
             participationPayout: 0,
             totalPayout: 0,
-            totalInvested: 0,
+            totalInvested: s.totalInvested, // Ensure totalInvested is carried over
             multiple: 0,
             equityPercentage: equityPercentBase100
         });
@@ -427,6 +486,8 @@ export const calculateWaterfall = (
                             valuation: representativeRound?.preMoneyValuation,
                             pricePerShare: representativeRound?.pricePerShare || representativeRound?.calculatedPricePerShare,
                             preferenceMultiple: pref?.multiple,
+                            isParticipating: pref?.type === 'Participating',
+                            participationCap: pref?.cap,
                             investedAmount: allClaims.reduce((sum, c) => c.shareClass === className ? sum + (c.claim / (pref?.multiple || 1)) : sum, 0)
                         }
                     }
@@ -510,6 +571,8 @@ export const calculateWaterfall = (
                         valuation: round.preMoneyValuation,
                         pricePerShare: round.pricePerShare || round.calculatedPricePerShare,
                         preferenceMultiple: pref.multiple,
+                        isParticipating: pref.type === 'Participating',
+                        participationCap: pref.cap,
                         investedAmount: round.investments.reduce((sum, inv) => sum + inv.amount, 0)
                     }
                 }
@@ -585,7 +648,12 @@ export const calculateWaterfall = (
                         calculation: {
                             type: 'Participation',
                             shareClass: round.shareClass,
-                            totalShares: totalRoundShares
+                            totalShares: totalRoundShares,
+                            totalParticipatingShares: totalParticipatingShares,
+                            isParticipating: true,
+                            participationCap: pref.cap,
+                            investedAmount: round.investments.reduce((sum, inv) => sum + inv.amount, 0),
+                            distributableAmount: remainingProceeds
                         }
                     }
                 });
@@ -746,8 +814,12 @@ export const calculateWaterfall = (
                         shareClass: 'All Participating',
                         totalShares: totalCatchupShares,
                         totalEligibleShares: totalCatchupShares,
+                        totalParticipatingShares: totalCatchupShares, // All eligible shares are participating in catchup
+                        isParticipating: true,
+                        participationCap: undefined, // Not applicable for a general catchup step
+                        investedAmount: undefined, // Not directly applicable to the catchup pool itself
                         distributableAmount: catchupProceeds,
-                        formula: `${totalCatchupShares.toLocaleString()} actions FD / ${totalCatchupShares.toLocaleString()} total × ${catchupProceeds.toLocaleString()}€ = ${Math.round(totalDistributedInCatchup).toLocaleString()}€`
+                        formula: `Available Proceeds distributed among all remaining participating shares (${totalCatchupShares.toLocaleString()} shares)`
                     }
                 }
             });

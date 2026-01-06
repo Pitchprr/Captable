@@ -30,6 +30,7 @@ export interface Round {
     discount?: number; // SAFE, BSA Air, Convertible Note (as percentage, e.g. 20 for 20%)
     conversionTrigger?: string; // Event description
     interestRate?: number; // Convertible Note
+    conversionBasis?: 'pre-money' | 'post-money'; // SAFE Specific
 
     pricePerShare: number; // Manual override if > 0
     totalShares: number; // Manual override if > 0
@@ -74,6 +75,47 @@ export interface CapTable {
     rounds: Round[];
     optionGrants: OptionGrant[]; // Track option grants from the pool
     startupName?: string; // Name of the startup/project
+    convertibles?: ConvertibleInstrument[]; // New separate list for instruments
+}
+
+// --- Convertible Instruments (New Finance-Grade Models) ---
+
+export type ConvertibleType = 'SAFE' | 'ConvertibleNote' | 'BSA_Air' | 'Warrant';
+export type ConversionBasis = 'pre-money' | 'post-money';
+export type DayCountConvention = '360' | '365' | 'actual';
+export type TriggerType = 'financing-round' | 'liquidity-event' | 'date' | 'manual';
+
+export interface ConvertibleInstrument {
+    id: string;
+    type: ConvertibleType;
+    name: string; // e.g. "YC SAFE 2024"
+    investorId: string; // Link to Shareholder
+    amount: number; // Principal investment
+    date: string; // Investment date
+
+    // Common Terms
+    valuationCap?: number;
+    discount?: number; // percentage (0-100)
+
+    // SAFE Specific
+    conversionBasis?: ConversionBasis; // Default 'post-money' for modern SAFEs
+
+    // Note (OC) Specific
+    interestRate?: number; // annual %
+    interestStartDate?: string;
+    maturityDate?: string;
+    dayCountConvention?: DayCountConvention;
+    isInterestConvertible?: boolean; // If true, interest adds to principal. If false, paid in cash.
+
+    // BSA/Warrant Specific
+    strikePrice?: number;
+    expirationDate?: string;
+    warrantCoverage?: number; // % coverage
+    isCashlessExercise?: boolean;
+
+    // Status
+    isConverted?: boolean;
+    convertedRoundId?: string; // ID of the round that triggered conversion
 }
 
 export interface CapTableSummaryItem {
@@ -197,9 +239,12 @@ export interface WaterfallStep {
             totalShares?: number;
             type?: 'Preference' | 'CarveOut' | 'Participation' | 'Catchup';
             shareClass?: string;
+            isParticipating?: boolean;
+            participationCap?: number;
             investedAmount?: number;
             // Global calculation info
             totalEligibleShares?: number;
+            totalParticipatingShares?: number;
             distributableAmount?: number;
             formula?: string;
         };

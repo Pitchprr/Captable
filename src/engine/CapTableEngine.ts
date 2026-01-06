@@ -270,4 +270,209 @@ export const calculateCapTableState = (capTable: CapTable) => {
         finalSharePrice: currentSharePrice,
         postMoneyValuation: totalSharesOutstanding * currentSharePrice
     };
+    return {
+        summary,
+        totalSharesOutstanding,
+        totalSharesNonDiluted,
+        totalPoolShares,
+        finalSharePrice: currentSharePrice,
+        postMoneyValuation: totalSharesOutstanding * currentSharePrice
+    };
+};
+
+/**
+ * Calculates the number of shares a convertible instrument would receive
+ * based on a trigger valuation and share price.
+ */
+export const calculateInstrumentShares = (
+    instrument: any, // Typed as ConvertibleInstrument in usage
+    triggerDate: string,
+    preMoneyValuation: number,
+    fullyDilutedShares: number
+): number => {
+    const amount = instrument.amount || 0;
+
+    // 1. Calculate Principal + Interest (for Notes)
+    let effectiveAmount = amount;
+    if (instrument.type === 'ConvertibleNote') {
+        const rate = (instrument.interestRate || 0) / 100;
+        const startDate = new Date(instrument.interestStartDate || instrument.date);
+        const trigger = new Date(triggerDate);
+        const diffTime = Math.abs(trigger.getTime() - startDate.getTime());
+        const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+
+        let yearFactor = 0;
+        if (instrument.dayCountConvention === '360') yearFactor = diffDays / 360;
+        else yearFactor = diffDays / 365; // Default to 365/Actual
+
+        const interest = amount * rate * yearFactor;
+
+        // If interest converts, add to principal. Otherwise it's paid out (but we assume conversion for now)
+        if (instrument.isInterestConvertible !== false) {
+            effectiveAmount += interest;
+        }
+    }
+
+    // 2. Determine Share Price
+    // Base Price from the Round
+    const roundPricePerShare = preMoneyValuation / fullyDilutedShares;
+
+    // Cap Price
+    let capPrice = Infinity;
+    if (instrument.valuationCap && instrument.valuationCap > 0) {
+        // Pre-Money Cap: Cap / Pre-Money Shares
+        if (instrument.conversionBasis === 'pre-money') {
+            capPrice = instrument.valuationCap / fullyDilutedShares;
+        }
+        // Post-Money Cap: Cap is technically "Post-Money Valuation" of the safe itself?
+        // Standard YC Post-Money Safe: ownership = Investment / Cap.
+        // Implies Price = Cap / (PostMoneyShares). 
+        // For simplicity in this engine V1: We treat Cap as a Pre-Money Cap equivalent for price calc
+        // unless explicitly handled differently. Most tools approx Cap Price = Cap / FD_Shares.
+        else {
+            capPrice = instrument.valuationCap / fullyDilutedShares;
+        }
+    }
+
+    // Discount Price
+    let discountPrice = Infinity;
+    if (instrument.discount && instrument.discount > 0) {
+        discountPrice = roundPricePerShare * (1 - (instrument.discount / 100));
+    }
+
+    // Conversion Price is the BEST (Lowest) price
+    const conversionPrice = Math.min(roundPricePerShare, capPrice, discountPrice);
+
+    // 3. Warrants / BSA
+    if (instrument.type === 'BSA_Air' || instrument.type === 'Warrant') {
+        // Warrants usually invest at Strike Price. 
+        // Amount here usually means "Nominal Amount" or number of warrants?
+        // If 'amount' is money invested: Shares = Amount / Strike.
+        // But usually BSA is "Number of BSA" * Strike.
+        // Let's assume 'amount' is the Investment Value for now, and Strike is fixed.
+
+        // If logic is: Customer has N warrants. 
+        // For now, let's treat Amount as Investment to be converted.
+        if (instrument.strikePrice && instrument.strikePrice > 0) {
+            return Math.floor(effectiveAmount / instrument.strikePrice);
+        }
+    }
+
+    if (conversionPrice <= 0 || conversionPrice === Infinity) return 0;
+
+    return Math.floor(effectiveAmount / conversionPrice);
+};
+
+/**
+ * Calculates a Pro-Forma Cap Table assuming a next financing round triggers all convertibles.
+ */
+export const calculateProFormaState = (
+    capTable: CapTable,
+    nextRoundValuation: number, // Pre-Money
+    nextRoundDate?: string
+) => {
+    // 1. Get Base State (Legal)
+    const baseState = calculateCapTableState(capTable);
+    const fullyDilutedShares = baseState.totalSharesOutstanding; // Pre-Round FD
+    const triggerDate = nextRoundDate || new Date().toISOString().split('T')[0];
+
+    // 2. Clone Summary to modify
+    const summary = baseState.summary.map(s => ({ ...s, totalShares: s.totalShares })); // Shallow copy items
+    const summaryMap = new Map(summary.map(s => [s.shareholderId, s]));
+
+    let totalNewSharesFromConvertibles = 0;
+
+    // 3. Process Convertibles (FROM ROUNDS V2)
+    // Iterate over rounds that are NOT Equity
+    capTable.rounds.forEach(round => {
+        if (round.investmentType && round.investmentType !== 'Equity') {
+            // This is a convertible round (SAFE, Note, BSA)
+            // We treat each investment in this round as an instrument
+
+            const roundParams = {
+                type: round.investmentType,
+                valuationCap: round.valuationCap,
+                discount: round.discount,
+                conversionBasis: round.conversionBasis,
+                interestRate: round.interestRate,
+                interestStartDate: round.date, // Default to round date
+                dayCountConvention: '365', // Default
+                strikePrice: round.valuationFloor // Using valuationFloor as strike/floor for BSA if needed, or specific strike
+                // Note: For BSA Air, 'valuationFloor' usually acts as a floor, but strict BSA might need 'strikePrice'.
+                // If round.valuationFloor is used, we pass it. 
+                // We should probably map fields more strictly if we add 'strikePrice' to Round interface.
+            };
+
+            round.investments.forEach(inv => {
+                // Construct a temporary instrument object for calculation
+                const instrumentMock = {
+                    ...roundParams,
+                    amount: inv.amount,
+                    date: round.date,
+                    // Specific overrides if needed
+                };
+
+                const newShares = calculateInstrumentShares(
+                    instrumentMock,
+                    triggerDate,
+                    nextRoundValuation,
+                    fullyDilutedShares
+                );
+
+                // Add to shareholder
+                const shareholder = summaryMap.get(inv.shareholderId);
+                if (shareholder) {
+                    shareholder.totalShares += newShares;
+                }
+
+                totalNewSharesFromConvertibles += newShares;
+            });
+        }
+    });
+
+    // 3b. Process Standalone Convertibles (Legacy Support)
+    if (capTable.convertibles) {
+        capTable.convertibles.forEach(inst => {
+            if (inst.isConverted) return; // Skip if already converted legally
+
+            const newShares = calculateInstrumentShares(
+                inst,
+                triggerDate,
+                nextRoundValuation,
+                fullyDilutedShares
+            );
+
+            // Add to shareholder
+            const shareholder = summaryMap.get(inst.investorId);
+            if (shareholder) {
+                shareholder.totalShares += newShares;
+            } else {
+                // Should not happen if data integrity is kept, but maybe log warning
+            }
+
+            totalNewSharesFromConvertibles += newShares;
+        });
+    }
+
+    // 4. Recalculate Totals
+    const proFormaTotalShares = fullyDilutedShares + totalNewSharesFromConvertibles; // + New Round Shares?
+    // We are only calculating "Post-Conversion, Pre-New-Money" usually, 
+    // OR "Post-Conversion, Post-New-Money" if we include the new round itself.
+    // The requirement is "Pro-Forma" preview. Usually "As-Converted" (before new money enters).
+
+    // Recalculate Percentages
+    summary.forEach(item => {
+        item.ownershipPercentage = proFormaTotalShares > 0 ? ((item.totalShares + item.totalOptions) / proFormaTotalShares) * 100 : 0;
+        item.ownershipPercentageNonDiluted = proFormaTotalShares > 0 ? (item.totalShares / proFormaTotalShares) * 100 : 0; // Approx
+    });
+
+    return {
+        summary,
+        totalSharesOutstanding: proFormaTotalShares,
+        totalSharesNonDiluted: baseState.totalSharesNonDiluted + totalNewSharesFromConvertibles,
+        totalPoolShares: baseState.totalPoolShares,
+        finalSharePrice: baseState.finalSharePrice, // Or calculate new one based on ProForma Valuation?
+        postMoneyValuation: nextRoundValuation, // Pro-Forma this IS the valuation
+        totalNewSharesFromConvertibles
+    };
 };
