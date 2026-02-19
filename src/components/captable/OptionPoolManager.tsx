@@ -217,7 +217,7 @@ export const OptionPoolManager: React.FC<OptionPoolManagerProps> = ({ capTable, 
                                     <div className="flex items-center gap-4">
                                         <div className="text-right">
                                             <div className="text-xs text-slate-400 uppercase">Granted</div>
-                                            <div className="text-sm font-bold text-green-600">{formatNumber(stats.granted)}</div>
+                                            <div className="text-sm font-bold text-green-600">{formatNumber(stats.granted)}</div>passe la Cap Table Summary
                                         </div>
                                         <Button
                                             size="sm"
