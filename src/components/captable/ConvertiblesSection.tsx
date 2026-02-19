@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
-import { Plus, Trash2, Edit2, Settings, Calendar, TrendingUp, Info } from 'lucide-react';
-import { formatCurrency, formatPercent } from '../../utils';
+import { Plus, Trash2, Calendar, TrendingUp } from 'lucide-react';
+import { formatCurrency } from '../../utils';
 import type { CapTable, ConvertibleInstrument, ConvertibleType } from '../../engine/types';
 import { Tooltip } from '../ui/Tooltip';
 import { Input } from '../ui/Input';
