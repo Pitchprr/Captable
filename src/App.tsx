@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import type { CapTable, LiquidationPreference, CarveOutBeneficiary, EarnoutConfig } from './engine/types';
 import { calculateCapTableState } from './engine/CapTableEngine';
 import { LayoutDashboard, PieChart, TrendingUp, Download, Undo2, Redo2, Share2, Check, Save, Coins, ChevronLeft, ChevronRight } from 'lucide-react';
@@ -215,7 +215,7 @@ function App() {
   const [carveOutBeneficiary, setCarveOutBeneficiary] = useState<CarveOutBeneficiary>('everyone');
   const [isSensitivityEnabled, setIsSensitivityEnabled] = useState(false);
 
-  const capTableState = calculateCapTableState(capTable);
+  const capTableState = useMemo(() => calculateCapTableState(capTable), [capTable]);
   const { postMoneyValuation, summary: capTableSummary } = capTableState;
 
   const [isResetModalOpen, setIsResetModalOpen] = useState(false);
@@ -796,8 +796,8 @@ function App() {
 
 
             {activeTab === 'captable' ? (
-              capTable.rounds.length === 0 ? (
-                <FounderSetup onComplete={(initialData) => handleCapTableUpdate(initialData)} />
+              capTable.rounds.length === 0 && capTable.shareholders.length === 0 ? (
+                <FounderSetup onComplete={(initialData) => { handleCapTableUpdate(initialData); setActiveTab('captable'); }} />
               ) : (
                 <CapTableView capTable={capTable} setCapTable={handleCapTableUpdate} />
               )

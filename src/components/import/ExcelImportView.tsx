@@ -2,10 +2,11 @@ import React, { useState, useCallback } from 'react';
 import { useDropzone } from 'react-dropzone';
 import {
     FileSpreadsheet, ArrowRight, X, Upload, RefreshCw,
-    Plus, Trash2, CheckCircle, AlertTriangle, Sparkles, Clipboard, Code
+    Plus, Trash2, CheckCircle, AlertTriangle, Sparkles, Clipboard, Code, Zap, Users, Layers
 } from 'lucide-react';
 import { Button } from '../ui/Button';
 import { parseFile, processImportedData, processAIJson, smartColumnMatch, type SmartMatchResult } from '../../utils/excelImport';
+import { parseWithClaude, fileToText } from '../../utils/claudeImport';
 import type { DetectedRound, ImportedRow } from './types';
 import type { CapTable } from '../../engine/types';
 
@@ -21,7 +22,7 @@ interface RoundMapping {
     investmentColumn: string;
 }
 
-type ImportStep = 'upload' | 'ai-paste' | 'columns' | 'rounds' | 'validation' | 'preview';
+type ImportStep = 'upload' | 'ai-paste' | 'columns' | 'rounds' | 'validation' | 'preview' | 'claude-processing' | 'claude-result';
 
 interface ValidationError {
     id: string;
@@ -54,6 +55,52 @@ export const ExcelImportView: React.FC<ExcelImportViewProps> = ({ onComplete, on
     // Validation state
     const [validationErrors, setValidationErrors] = useState<ValidationError[]>([]);
 
+    // Claude AI state
+    const [claudeResult, setClaudeResult] = useState<CapTable | null>(null);
+    const [claudeStatusMessage, setClaudeStatusMessage] = useState('Analyse en cours...');
+
+    const handleClaudeImport = useCallback(async (file: File) => {
+        setStep('claude-processing');
+        setError(null);
+        setFileName(file.name);
+
+        try {
+            setClaudeStatusMessage('Lecture du fichier...');
+            const text = await fileToText(file);
+
+            setClaudeStatusMessage('Claude analyse votre cap table...');
+            const result = await parseWithClaude(text, file.name);
+
+            setClaudeResult(result);
+            setStep('claude-result');
+        } catch (err) {
+            const msg = err instanceof Error ? err.message : 'Erreur inconnue';
+            setError(`Claude n'a pas pu analyser ce fichier : ${msg}. Basculement en mode manuel.`);
+            // Fallback: try manual parsing
+            try {
+                const result = await parseFile(file);
+                setHeaders(result.headers);
+                setData(result.data);
+                const { matches, detectedRounds } = smartColumnMatch(result.headers, result.data);
+                const nameMatch = matches.find(m => m.destination === 'name');
+                if (nameMatch) setNameColumn(nameMatch.header);
+                const roleMatch = matches.find(m => m.destination === 'role');
+                if (roleMatch) setRoleColumn(roleMatch.header);
+                if (detectedRounds.length > 0) {
+                    setRounds(detectedRounds.map(dr => ({
+                        id: dr.id,
+                        name: dr.name,
+                        sharesColumn: matches.find(m => m.roundId === dr.id && m.destination === 'shares')?.header || '',
+                        investmentColumn: matches.find(m => m.roundId === dr.id && m.destination === 'investment')?.header || ''
+                    })));
+                }
+                setStep('columns');
+            } catch {
+                setStep('upload');
+            }
+        }
+    }, []);
+
     const onDrop = useCallback(async (acceptedFiles: File[], fileRejections: any[]) => {
         if (fileRejections.length > 0) {
             setError(`Type de fichier non supporté. Veuillez utiliser un format Excel (.xlsx, .xls) ou CSV.`);
@@ -62,6 +109,12 @@ export const ExcelImportView: React.FC<ExcelImportViewProps> = ({ onComplete, on
 
         const file = acceptedFiles[0];
         if (!file) return;
+
+        // Use Claude AI by default if API key is configured
+        if (import.meta.env.VITE_ANTHROPIC_API_KEY) {
+            handleClaudeImport(file);
+            return;
+        }
 
         setIsProcessing(true);
         setError(null);
@@ -125,24 +178,40 @@ export const ExcelImportView: React.FC<ExcelImportViewProps> = ({ onComplete, on
         multiple: false
     });
 
-    const handleAIParse = () => {
+    const handleAIParse = async () => {
         if (!rawText.trim()) return;
 
         // If it looks like JSON, try to parse directly
         if (rawText.trim().startsWith('{') || rawText.trim().startsWith('[')) {
             try {
                 const parsed = JSON.parse(rawText);
-                // Implementation of direct JSON injection would go here
-                // For now, we still go through validation
                 const capTable = processAIJson(parsed);
                 onComplete(capTable);
                 return;
             } catch (e) {
-                setError("Format JSON invalide. Si vous avez copié des données Excel, utilisez le bouton Assistant.");
+                setError("Format JSON invalide.");
             }
         }
 
-        // TSV Parsing (Tab Separated Values from Excel)
+        // Use Claude if API key is available
+        if (import.meta.env.VITE_ANTHROPIC_API_KEY) {
+            setStep('claude-processing');
+            setError(null);
+            setFileName('texte collé');
+            try {
+                setClaudeStatusMessage('Claude analyse votre cap table...');
+                const result = await parseWithClaude(rawText, 'pasted-data');
+                setClaudeResult(result);
+                setStep('claude-result');
+            } catch (err) {
+                const msg = err instanceof Error ? err.message : 'Erreur inconnue';
+                setError(`Erreur Claude : ${msg}`);
+                setStep('ai-paste');
+            }
+            return;
+        }
+
+        // Fallback: TSV Parsing (Tab Separated Values from Excel)
         const lines = rawText.trim().split('\n');
         const detectedHeaders = lines[0].split('\t').map(h => h.trim());
         const rows = lines.slice(1).map(line => {
@@ -286,17 +355,145 @@ Réponds UNIQUEMENT avec le JSON.`;
 
                             <div
                                 onClick={() => setStep('ai-paste')}
-                                className="flex flex-col items-center justify-center p-12 border-4 border-dashed border-emerald-200 bg-emerald-50/30 rounded-3xl cursor-pointer hover:bg-emerald-50 transition-all duration-300 group"
+                                className="flex flex-col items-center justify-center p-12 border-4 border-dashed border-purple-200 bg-purple-50/30 rounded-3xl cursor-pointer hover:bg-purple-50 transition-all duration-300 group"
                             >
-                                <div className="w-16 h-16 bg-emerald-100 text-emerald-600 rounded-2xl flex items-center justify-center mb-4 group-hover:scale-110 transition-transform">
+                                <div className="w-16 h-16 bg-purple-100 text-purple-600 rounded-2xl flex items-center justify-center mb-4 group-hover:scale-110 transition-transform">
                                     <Clipboard className="w-8 h-8" />
                                 </div>
-                                <h3 className="text-lg font-bold text-emerald-800">Magique : Coller</h3>
-                                <p className="text-emerald-600/70 text-xs text-center mt-2 font-medium italic">Assisté par IA (Gemini/ChatGPT)</p>
+                                <h3 className="text-lg font-bold text-purple-800">Coller du texte</h3>
+                                <p className="text-purple-600/70 text-xs text-center mt-2 font-medium italic">Copier-coller depuis Excel ou JSON</p>
                             </div>
                         </div>
                     </div>
                 )}
+
+                {step === 'claude-processing' && (
+                    <div className="flex flex-col items-center justify-center py-20 space-y-8">
+                        <div className="relative">
+                            <div className="w-24 h-24 rounded-3xl bg-gradient-to-br from-purple-500 to-indigo-600 flex items-center justify-center shadow-2xl shadow-purple-500/30">
+                                <Sparkles className="w-12 h-12 text-white animate-pulse" />
+                            </div>
+                            <div className="absolute inset-0 rounded-3xl border-4 border-purple-400/40 animate-ping" />
+                        </div>
+                        <div className="text-center">
+                            <h3 className="text-2xl font-black text-slate-800 mb-2">Claude analyse votre cap table</h3>
+                            <p className="text-slate-500 text-sm">{claudeStatusMessage}</p>
+                            <p className="text-slate-400 text-xs mt-1 italic">Généralement moins de 5 secondes</p>
+                        </div>
+                        <div className="flex gap-2">
+                            {[0, 1, 2].map(i => (
+                                <div key={i} className="w-2 h-2 rounded-full bg-purple-400 animate-bounce" style={{ animationDelay: `${i * 0.15}s` }} />
+                            ))}
+                        </div>
+                    </div>
+                )}
+
+                {step === 'claude-result' && claudeResult && (() => {
+                    const totalShares = claudeResult.rounds.reduce((sum, r) =>
+                        sum + r.investments.reduce((s, inv) => s + (inv.shares || 0), 0), 0);
+                    const totalRaised = claudeResult.rounds.reduce((sum, r) =>
+                        sum + r.investments.reduce((s, inv) => s + (inv.amount || 0), 0), 0);
+                    return (
+                        <div className="space-y-5">
+                            {/* Header */}
+                            <div className="bg-gradient-to-r from-purple-600 to-indigo-600 p-5 rounded-2xl text-white shadow-lg shadow-purple-500/20">
+                                <div className="flex items-center justify-between">
+                                    <div className="flex items-center gap-3">
+                                        <Zap className="w-5 h-5 text-yellow-300" />
+                                        <div>
+                                            <h3 className="text-lg font-black">{claudeResult.startupName}</h3>
+                                            <p className="opacity-70 text-xs">Analysé par Claude — vérifiez avant de confirmer</p>
+                                        </div>
+                                    </div>
+                                    <div className="flex gap-4 text-right">
+                                        <div>
+                                            <div className="text-xl font-black">{claudeResult.shareholders.length}</div>
+                                            <div className="text-xs opacity-70">actionnaires</div>
+                                        </div>
+                                        <div>
+                                            <div className="text-xl font-black">{claudeResult.rounds.length}</div>
+                                            <div className="text-xs opacity-70">rounds</div>
+                                        </div>
+                                        <div>
+                                            <div className="text-xl font-black">{totalShares.toLocaleString('fr-FR')}</div>
+                                            <div className="text-xs opacity-70">actions totales</div>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+
+                            {/* Rounds detail */}
+                            <div className="border border-slate-200 rounded-2xl overflow-hidden">
+                                <div className="px-4 py-3 bg-slate-50 border-b border-slate-200 flex items-center gap-2">
+                                    <Layers className="w-4 h-4 text-slate-500" />
+                                    <span className="text-xs font-black text-slate-500 uppercase tracking-widest">Rounds détectés</span>
+                                </div>
+                                <div className="divide-y divide-slate-100 max-h-64 overflow-y-auto">
+                                    {claudeResult.rounds.length === 0 && (
+                                        <div className="px-4 py-6 text-center text-slate-400 text-sm">Aucun round extrait</div>
+                                    )}
+                                    {claudeResult.rounds.map(r => {
+                                        const roundShares = r.investments.reduce((s, inv) => s + (inv.shares || 0), 0);
+                                        const roundAmount = r.investments.reduce((s, inv) => s + (inv.amount || 0), 0);
+                                        return (
+                                            <div key={r.id} className="px-4 py-3 flex items-center justify-between hover:bg-slate-50">
+                                                <div>
+                                                    <div className="font-bold text-slate-800 text-sm">{r.name}</div>
+                                                    <div className="text-xs text-slate-400">{r.date} · classe {r.shareClass} · {r.investments.length} investisseurs</div>
+                                                </div>
+                                                <div className="text-right">
+                                                    <div className="font-mono text-sm font-bold text-slate-700">{roundShares.toLocaleString('fr-FR')} actions</div>
+                                                    {roundAmount > 0 && <div className="text-xs text-slate-400">{roundAmount.toLocaleString('fr-FR')} €</div>}
+                                                </div>
+                                            </div>
+                                        );
+                                    })}
+                                </div>
+                            </div>
+
+                            {/* Shareholders preview */}
+                            <div className="border border-slate-200 rounded-2xl overflow-hidden">
+                                <div className="px-4 py-3 bg-slate-50 border-b border-slate-200 flex items-center gap-2">
+                                    <Users className="w-4 h-4 text-slate-500" />
+                                    <span className="text-xs font-black text-slate-500 uppercase tracking-widest">Actionnaires ({claudeResult.shareholders.length})</span>
+                                </div>
+                                <div className="divide-y divide-slate-100 max-h-40 overflow-y-auto">
+                                    {claudeResult.shareholders.map(sh => (
+                                        <div key={sh.id} className="px-4 py-2 flex items-center justify-between">
+                                            <span className="text-sm text-slate-800">{sh.name}</span>
+                                            <span className="text-xs bg-slate-100 text-slate-500 px-2 py-0.5 rounded-full">{sh.role}</span>
+                                        </div>
+                                    ))}
+                                </div>
+                            </div>
+
+                            {claudeResult.rounds.length === 0 && (
+                                <div className="flex items-start gap-2 p-3 bg-red-50 border border-red-200 rounded-xl text-red-700 text-xs">
+                                    <AlertTriangle className="w-4 h-4 shrink-0 mt-0.5" />
+                                    <span><strong>Aucun round détecté.</strong> Claude n'a pas pu extraire les tours de table. Essayez le mode manuel ou vérifiez que le bon onglet a été sélectionné.</span>
+                                </div>
+                            )}
+
+                            {totalRaised === 0 && claudeResult.rounds.length > 0 && (
+                                <div className="flex items-start gap-2 p-3 bg-amber-50 border border-amber-200 rounded-xl text-amber-700 text-xs">
+                                    <AlertTriangle className="w-4 h-4 shrink-0 mt-0.5" />
+                                    <span>Les montants investis ne sont pas disponibles dans ce fichier (format snapshot). Vous pourrez les saisir manuellement dans l'outil.</span>
+                                </div>
+                            )}
+
+                            <div className="flex justify-between pt-2 border-t border-slate-100">
+                                <Button variant="ghost" onClick={() => setStep('upload')}>Recommencer</Button>
+                                <Button
+                                    onClick={() => onComplete(claudeResult)}
+                                    disabled={claudeResult.rounds.length === 0}
+                                    className="bg-gradient-to-r from-purple-600 to-indigo-600 text-white hover:opacity-90 px-10 rounded-xl font-black shadow-lg shadow-purple-500/20 disabled:opacity-40 disabled:cursor-not-allowed"
+                                >
+                                    <CheckCircle className="mr-2 w-4 h-4" /> Confirmer l'import
+                                </Button>
+                            </div>
+                        </div>
+                    );
+                })()}
 
                 {step === 'ai-paste' && (
                     <div className="space-y-6">

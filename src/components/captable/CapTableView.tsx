@@ -51,6 +51,37 @@ export const CapTableView: React.FC<CapTableViewProps> = ({ capTable, setCapTabl
         [fullSummary]
     );
 
+    // Memoize legal state to avoid recalculating in render loops
+    const legalBaseFD = React.useMemo(
+        () => calculateCapTableState(effectiveCapTable).totalSharesOutstanding,
+        [effectiveCapTable]
+    );
+
+    // Pre-compute all convertible shares in one pass (avoids N×M calls in render)
+    const convertibleSharesMap = React.useMemo(() => {
+        if (!isProForma) return null;
+        const map = new Map<string, number>(); // key: `${roundId}-${shareholderId}`
+        const convRounds = effectiveCapTable.rounds.filter(r => r.investmentType && r.investmentType !== 'Equity');
+        for (const round of convRounds) {
+            let roundTotal = 0;
+            for (const inv of round.investments) {
+                const mock = {
+                    amount: inv.amount,
+                    type: round.investmentType || 'SAFE',
+                    valuationCap: round.valuationCap,
+                    discount: round.discount,
+                    date: round.date,
+                    interestRate: round.interestRate
+                };
+                const shares = calculateInstrumentShares(mock, new Date().toISOString().split('T')[0], proFormaValuation, legalBaseFD);
+                map.set(`${round.id}-${inv.shareholderId}`, shares);
+                roundTotal += shares;
+            }
+            map.set(`${round.id}-total`, roundTotal);
+        }
+        return map;
+    }, [effectiveCapTable, isProForma, proFormaValuation, legalBaseFD]);
+
     const updateShareholders = (shareholders: Shareholder[]) => {
         setCapTable(prev => ({ ...prev, shareholders }));
     };
@@ -323,46 +354,8 @@ export const CapTableView: React.FC<CapTableViewProps> = ({ capTable, setCapTabl
                                                         let isSimulated = false;
 
                                                         if (investment) {
-                                                            if (isProForma) {
-                                                                // Calculate simulated shares for this specific cell
-                                                                // We reconstruct the instrument mock here. 
-                                                                // (Ideally this should be cached/memoized but for UI responsiveness it's okay for now)
-                                                                const mockInstrument = {
-                                                                    amount: investment.amount,
-                                                                    type: round?.investmentType || 'SAFE',
-                                                                    valuationCap: round?.valuationCap,
-                                                                    discount: round?.discount,
-                                                                    date: round?.date,
-                                                                    interestRate: round?.interestRate
-                                                                };
-
-                                                                // We need the BASE FD Shares (from Legal State)
-                                                                // proFormaTotalShares includes convertibles, so we want the Pre-Conversion FD.
-                                                                // Luckily, `totalSharesOutstanding` in legal view is exactly that.
-                                                                // But here `totalSharesOutstanding` might be the Pro-Forma one if `calculationResult` is pro-forma...
-                                                                // Actually, `calculationResult` (ProForma) returns baseState.totalSharesOutstanding inside it?
-                                                                // Let's re-use the `calculateInstrumentShares` directly with care.
-
-                                                                // Note: `totalSharesNonDiluted` from result is (Base NonDiluted + NewShares).
-                                                                // We can approximate Pre-Round FD using : `totalSharesOutstanding - totalNewSharesFromConvertibles`.
-                                                                // Or better, we can just grab the legal cap table state quickly or store it. 
-                                                                // For now, let's trust that `effectiveCapTable` is the Legal Source.
-
-                                                                // QUICK FIX: We need the Legal FD Shares for accurate conversion.
-                                                                // `calculateCapTableState(effectiveCapTable).totalSharesOutstanding` would give it.
-                                                                // Let's assume for this cell render complexity we use a simplified estimate or pass it down.
-                                                                // Actually, referencing `shareClasses` logic, we are iterating `summary`.
-
-                                                                const calculatedShares = calculateInstrumentShares(
-                                                                    mockInstrument,
-                                                                    new Date().toISOString().split('T')[0],
-                                                                    proFormaValuation,
-                                                                    // We calculate Legal FD on the fly? Expensive but safe.
-                                                                    // Or we can memoize it outside the loop.
-                                                                    // Let's assume the user hasn't added 1000 rounds.
-                                                                    calculateCapTableState(effectiveCapTable).totalSharesOutstanding
-                                                                );
-
+                                                            if (isProForma && convertibleSharesMap) {
+                                                                const calculatedShares = convertibleSharesMap.get(`${r.id}-${item.shareholderId}`) || 0;
                                                                 displayValue = formatNumber(calculatedShares);
                                                                 isSimulated = true;
                                                             } else {
@@ -462,31 +455,16 @@ export const CapTableView: React.FC<CapTableViewProps> = ({ capTable, setCapTabl
 
                                     {/* Convertible Totals (V2) */}
                                     {convertibleRounds.map(r => {
-                                        let total = 0;
-                                        const round = effectiveCapTable.rounds.find(round => round.id === r.id);
-
-                                        if (isProForma) {
-                                            // Sum calculated shares
-                                            const baseFD = calculateCapTableState(effectiveCapTable).totalSharesOutstanding;
-
-                                            round?.investments.forEach(inv => {
-                                                const mock = {
-                                                    amount: inv.amount,
-                                                    type: round?.investmentType || 'SAFE',
-                                                    valuationCap: round?.valuationCap,
-                                                    discount: round?.discount,
-                                                    date: round?.date
-                                                };
-                                                total += calculateInstrumentShares(mock, new Date().toISOString(), proFormaValuation, baseFD);
-                                            });
+                                        if (isProForma && convertibleSharesMap) {
+                                            const total = convertibleSharesMap.get(`${r.id}-total`) || 0;
                                             return (
                                                 <td key={r.id} className="px-3 py-3 text-right font-mono text-indigo-300 font-bold bg-indigo-900/40">
                                                     {formatNumber(total)}
                                                 </td>
                                             );
                                         } else {
-                                            // Sum amounts
-                                            total = round?.investments.reduce((sum, inv) => sum + inv.amount, 0) || 0;
+                                            const round = effectiveCapTable.rounds.find(round => round.id === r.id);
+                                            const total = round?.investments.reduce((sum, inv) => sum + inv.amount, 0) || 0;
                                             return (
                                                 <td key={r.id} className="px-3 py-3 text-right font-mono text-slate-400">
                                                     {formatCurrency(total)}

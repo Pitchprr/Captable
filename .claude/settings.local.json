@@ -1,0 +1,13 @@
+{
+  "permissions": {
+    "allow": [
+      "mcp__Claude_Preview__preview_start",
+      "Bash(wc -l src/**/*.tsx src/**/*.ts src/*.tsx src/*.ts)",
+      "Bash(wc -l /c/Users/paulh/Desktop/Claude/Captable/src/components/**/*.tsx)",
+      "Bash(xargs wc:*)",
+      "Bash(xargs grep:*)",
+      "Bash(npm run:*)",
+      "Bash(node -e \":*)"
+    ]
+  }
+}
